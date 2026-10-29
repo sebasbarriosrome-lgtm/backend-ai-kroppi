@@ -1,0 +1,5 @@
+{
+  "class_names": ["Coffee___healthy", "Coffee___rust", "Coffee__phoma", "Coffee_miner"],
+  "umbral": 0.7,
+  "img_size": [224, 224]
+}

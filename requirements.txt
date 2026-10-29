@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+python-multipart
+sqlalchemy>=2.0
+psycopg2-binary
+pillow
+numpy
+python-dotenv
+google-genai
+httpx
+pyjwt[crypto]
+# Motor para correr el .tflite. En Linux/macOS:
+ai-edge-litert
+# Si ai-edge-litert no se instala en tu sistema (por ejemplo Windows),
+# comenta la línea anterior e instala en su lugar: tensorflow
