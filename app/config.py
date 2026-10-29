@@ -5,7 +5,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR / ".env", override=True)
 
 # --- Variables obligatorias: si faltan, el servidor no arranca y dice cuáles ---
 _REQUERIDAS = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "DATABASE_URL"]
@@ -29,7 +29,7 @@ for _prefijo in ("postgresql://", "postgres://"):
 
 # --- Gemini (opcional: sin clave, las recomendaciones quedan vacías) ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 GEMINI_TIMEOUT = float(os.getenv("GEMINI_TIMEOUT", "15"))
 
 # --- Modelo ---

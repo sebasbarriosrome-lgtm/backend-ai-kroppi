@@ -24,6 +24,10 @@ def _enfermedad_json(d: dict | None):
 
 
 def diagnostico_json(registro: dict, image_url: str) -> dict:
+    enfermedad = registro.get("disease")
+    nombre_comun = enfermedad["name"] if enfermedad else "Planta sana"
+    nombre_cientifico = (enfermedad.get("scientific_name") if enfermedad else None) or "No especificado"
+
     return {
         "id": registro["id"],
         "image_url": image_url,
@@ -31,6 +35,8 @@ def diagnostico_json(registro: dict, image_url: str) -> dict:
         "ai_prediction": {
             "model_version": registro["model_version"],
             "confidence": float(registro["confidence"]),
+            "disease_name": nombre_comun,
+            "scientific_name": nombre_cientifico,
             "top": registro["top"],
             "recommendations": registro["recommendations"],
         },

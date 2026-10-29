@@ -144,6 +144,8 @@ async def crear_diagnostico(
             "ai_prediction": {
                 "model_version": config.MODEL_VERSION,
                 "confidence": confianza,
+                "disease_name": enfermedad["name"] if enfermedad else "Planta sana",
+                "scientific_name": (enfermedad.get("scientific_name") if enfermedad else None) or "No especificado",
                 "top": top,
                 "recommendations": recomendaciones,
             },
