@@ -42,6 +42,7 @@ with open(CONFIG_PATH, encoding="utf-8") as f:
 
 # --- Mapeo: clase que devuelve el modelo -> `code` de la tabla diseases ---
 # (la tabla diseases no tiene columna model_class, así que el mapeo vive aquí)
+# --- Mapeo: clase del modelo -> código de enfermedad ---
 CLASE_A_CODIGO = {
     "Coffee___healthy": "cafe_sano",
     "Coffee___rust": "roya_cafe",
@@ -49,6 +50,36 @@ CLASE_A_CODIGO = {
     "Coffee_miner": "minador_cafe",
 }
 CODIGO_SANO = "cafe_sano"
+
+_PENDIENTE = ["Consultar a un agrónomo para definir el manejo."]
+
+# La tabla `diseases` ya no existe: el catálogo vive aquí (son solo 4 clases).
+ENFERMEDADES = {
+    "cafe_sano": {
+        "code": "cafe_sano", "name": "Hoja sana", "scientific_name": None,
+        "pathogen_type": None, "symptoms": [],
+        "general_recommendations": ["No se detectó enfermedad en esta foto. Revisa visualmente si hay síntomas."],
+        "requires_agronomist": False, "is_healthy": True,
+    },
+    "roya_cafe": {
+        "code": "roya_cafe", "name": "Roya del café", "scientific_name": "Hemileia vastatrix",
+        "pathogen_type": "Hongo",
+        "symptoms": ["Manchas amarillo-anaranjadas en el envés de la hoja, con aspecto polvoso."],
+        "general_recommendations": _PENDIENTE, "requires_agronomist": True, "is_healthy": False,
+    },
+    "phoma_cafe": {
+        "code": "phoma_cafe", "name": "Phoma", "scientific_name": "Phoma spp.",
+        "pathogen_type": "Hongo",
+        "symptoms": ["Manchas oscuras necróticas en hojas jóvenes y brotes."],
+        "general_recommendations": _PENDIENTE, "requires_agronomist": True, "is_healthy": False,
+    },
+    "minador_cafe": {
+        "code": "minador_cafe", "name": "Minador de la hoja", "scientific_name": "Leucoptera coffeella",
+        "pathogen_type": "Insecto (plaga)",
+        "symptoms": ["Manchas irregulares y secas en la hoja, producidas por las larvas."],
+        "general_recommendations": _PENDIENTE, "requires_agronomist": True, "is_healthy": False,
+    },
+}
 
 # --- API ---
 MAX_UPLOAD_MB = 10
