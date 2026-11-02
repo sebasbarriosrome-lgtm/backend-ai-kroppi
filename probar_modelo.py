@@ -13,7 +13,7 @@ import sys
 import numpy as np
 from PIL import Image, ImageOps
 
-from app.classifier import Classifier
+from app.services.classifier import Classifier
 
 
 def correr(clf: Classifier, imagen: Image.Image, escala: float) -> np.ndarray:

@@ -27,8 +27,10 @@ async def eliminar_imagen(http: httpx.AsyncClient, ruta: str) -> None:
     """Limpieza de mejor esfuerzo; nunca lanza excepción."""
     try:
         await http.request(
-            "DELETE", f"{_BASE}/object/{config.SUPABASE_BUCKET}",
-            json={"prefixes": [ruta]}, headers=_AUTH,
+            "DELETE",
+            f"{_BASE}/object/{config.SUPABASE_BUCKET}",
+            json={"prefixes": [ruta]},
+            headers=_AUTH,
         )
     except Exception:
         log.warning("No se pudo eliminar %s del bucket", ruta)
