@@ -1,0 +1,39 @@
+unit: diagnoses
+bindings:
+  - type: route-declaration
+    name: "POST /diagnoses"
+    source_loc: "app/routers/diagnoses.py:10"
+    target: "crear_diagnostico"
+    must_appear_in_target: true
+    notes: "Accepts multipart file upload and required sample metadata."
+  - type: route-declaration
+    name: "GET /diagnoses"
+    source_loc: "app/routers/diagnoses.py:28"
+    target: "listar_diagnosticos"
+    must_appear_in_target: true
+    notes: "Returns a paginated diagnosis list for the authenticated user."
+  - type: filter
+    name: "Depends(usuario_actual)"
+    source_loc: "app/routers/diagnoses.py:12"
+    target: "crear_diagnostico"
+    must_appear_in_target: true
+    notes: "Protects user-owned diagnostics and upload routes with JWT validation."
+runtime_config:
+  - key: MAX_UPLOAD_MB
+    source_loc: "app/config/settings.py:52"
+    source: code
+    default_value: "10"
+    must_appear_in_target: true
+    notes: "Short-circuits oversized image uploads before remote processing."
+  - key: CULTIVOS_SOPORTADOS
+    source_loc: "app/config/settings.py:53"
+    source: code
+    default_value: "{'cafe'}"
+    must_appear_in_target: true
+    notes: "Restricts the model to supported crop classes."
+  - key: SUPABASE_BUCKET
+    source_loc: "app/config/settings.py:9"
+    source: env
+    default_value: "diagnosticos"
+    must_appear_in_target: true
+    notes: "Destination bucket for uploaded diagnosis images."

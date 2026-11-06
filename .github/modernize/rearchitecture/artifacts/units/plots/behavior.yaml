@@ -1,0 +1,40 @@
+unit: plots
+side_effects:
+  - source_loc: "app/repository/plot_repository.py:9-23"
+    effect: "Creates a plot record under an existing crop and seed status as HEALTHY."
+    must_preserve: true
+  - source_loc: "app/repository/plot_repository.py:48-69"
+    effect: "Updates lot coordinates and metadata without deleting the record."
+    must_preserve: true
+branches:
+  - source_loc: "app/repository/plot_repository.py:52-57"
+    condition: "latitude and longitude are both present or both absent"
+    behavior: "Accepts or rejects coordinate updates as a paired payload."
+    must_preserve: true
+  - source_loc: "app/services/plot_service.py:15-22"
+    condition: "the plot has a last sample record"
+    behavior: "Includes the latest sample in the output payload and enriches the record with recent diagnostics."
+    must_preserve: true
+error_paths:
+  - source_loc: "app/repository/plot_repository.py:7-13"
+    trigger: "crop is archived"
+    outcome: "400 business-rule response"
+    contract: "HTTP 400"
+    must_preserve: true
+  - source_loc: "app/repository/plot_repository.py:71-80"
+    trigger: "missing or mismatched coordinate payload after update"
+    outcome: "400 business-rule response"
+    contract: "HTTP 400"
+    must_preserve: true
+  - source_loc: "app/repository/helpers.py:95-110"
+    trigger: "plot does not belong to the authenticated user"
+    outcome: "404 business-rule response"
+    contract: "HTTP 404"
+    must_preserve: true
+concurrency:
+  model: async
+  tx_boundary:
+    source_loc: "app/services/plot_service.py:5-23"
+    scope: "Repository calls are executed via threadpool, but the service does not open a database transaction guard."
+    isolation: "none"
+    must_preserve: false

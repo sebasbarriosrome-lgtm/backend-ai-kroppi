@@ -1,0 +1,52 @@
+unit: diagnoses
+side_effects:
+  - source_loc: "app/services/diagnosis_service.py:60-75"
+    effect: "Uploads the image to the configured storage bucket and stores the diagnosis artifact path."
+    must_preserve: true
+  - source_loc: "app/services/diagnosis_service.py:77-107"
+    effect: "Persists diagnosis metadata, confidence, recommendations, and AI prediction payload."
+    must_preserve: true
+  - source_loc: "app/services/diagnosis_service.py:109-114"
+    effect: "Deletes the uploaded image if persistence fails, to avoid orphaned storage artifacts."
+    must_preserve: true
+branches:
+  - source_loc: "app/services/diagnosis_service.py:31-42"
+    condition: "latitude and longitude are provided together or both are omitted"
+    behavior: "Accepts a valid paired coordinate payload or rejects invalid partial coordinates."
+    must_preserve: true
+  - source_loc: "app/services/diagnosis_service.py:43-58"
+    condition: "model confidence crosses the threshold"
+    behavior: "Assigns a disease code when confidence is sufficient; otherwise returns a healthy classification and no disease-specific recommendations."
+    must_preserve: true
+  - source_loc: "app/services/diagnosis_service.py:59-74"
+    condition: "disease is not healthy"
+    behavior: "Calls the recommendation provider to enrich the diagnosis response."
+    must_preserve: true
+error_paths:
+  - source_loc: "app/services/diagnosis_service.py:25-27"
+    trigger: "partial latitude/longitude payload"
+    outcome: "400 business-rule response"
+    contract: "HTTP 400"
+    must_preserve: true
+  - source_loc: "app/services/diagnosis_service.py:28-30"
+    trigger: "unsupported MIME type or payload size > MAX_UPLOAD_MB"
+    outcome: "400/413 validation response"
+    contract: "HTTP 400 or HTTP 413"
+    must_preserve: true
+  - source_loc: "app/services/diagnosis_service.py:31-42"
+    trigger: "invalid or unreadable image"
+    outcome: "400 invalid image response"
+    contract: "HTTP 400"
+    must_preserve: true
+  - source_loc: "app/services/diagnosis_service.py:77-107"
+    trigger: "Supabase persistence or storage call fails"
+    outcome: "500/502 fallback with cleanup or error response"
+    contract: "HTTP 500 or HTTP 502"
+    must_preserve: true
+concurrency:
+  model: async
+  tx_boundary:
+    source_loc: "app/services/diagnosis_service.py:60-114"
+    scope: "The upload and persistence sequence is not atomic; a failed save triggers cleanup of the uploaded file."
+    isolation: "none"
+    must_preserve: false

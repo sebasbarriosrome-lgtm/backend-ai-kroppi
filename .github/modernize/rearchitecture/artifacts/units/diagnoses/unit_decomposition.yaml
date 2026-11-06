@@ -1,0 +1,8 @@
+unit: diagnoses
+commit: false
+candidate_splits:
+  - drivers:
+      - "diagnosis orchestration bundles image validation, model prediction, storage, and persistence"
+    split_target: "app/services/diagnosis_service.py"
+    rationale: "A future diagnosis domain module can isolate image validation, model inference, and persistence cleanup concerns separately."
+    source_loc: "app/services/diagnosis_service.py:17-114"

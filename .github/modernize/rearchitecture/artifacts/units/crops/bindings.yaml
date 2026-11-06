@@ -1,0 +1,39 @@
+unit: crops
+bindings:
+  - type: route-declaration
+    name: "GET /crop-types"
+    source_loc: "app/routers/crops.py:10"
+    target: "tipos_de_cultivo"
+    must_appear_in_target: true
+    notes: "Exposes the crop catalog endpoint."
+  - type: route-declaration
+    name: "POST /crops"
+    source_loc: "app/routers/crops.py:14"
+    target: "crear_cultivo"
+    must_appear_in_target: true
+    notes: "Creates a crop with a validated farm and crop type."
+  - type: route-declaration
+    name: "GET /crops"
+    source_loc: "app/routers/crops.py:19"
+    target: "listar_cultivos"
+    must_appear_in_target: true
+    notes: "Lists either active or archived crops depending on the archived query flag."
+  - type: filter
+    name: "Depends(usuario_actual)"
+    source_loc: "app/routers/crops.py:12"
+    target: "tipos_de_cultivo"
+    must_appear_in_target: true
+    notes: "Protects every crop route with a validated JWT subject."
+runtime_config:
+  - key: SUPABASE_URL
+    source_loc: "app/config/settings.py:6"
+    source: env
+    default_value: "required"
+    must_appear_in_target: true
+    notes: "Provides the Supabase service base URL used for repository queries."
+  - key: SUPABASE_SERVICE_ROLE_KEY
+    source_loc: "app/config/settings.py:7"
+    source: env
+    default_value: "required"
+    must_appear_in_target: true
+    notes: "Provides the server-side credential driving repository access."

@@ -1,0 +1,15 @@
+unit: health
+bindings:
+  - type: route-declaration
+    name: "GET /health"
+    source_loc: "app/routers/health.py:7"
+    target: "health"
+    must_appear_in_target: true
+    notes: "Exposes the app health probe without authentication."
+runtime_config:
+  - key: MODEL_VERSION
+    source_loc: "app/config/settings.py:17"
+    source: env
+    default_value: "v2"
+    must_appear_in_target: true
+    notes: "Returned in the response body so callers can confirm the active model version."

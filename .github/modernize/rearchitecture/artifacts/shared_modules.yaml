@@ -1,0 +1,90 @@
+modules:
+  - name: app.config.settings
+    kind: config
+    source_loc: "app/config/settings.py:1"
+    used_by_units:
+      - health
+      - crops
+      - plots
+      - samples
+      - diagnoses
+    fields:
+      - name: MODEL_VERSION
+        type: "str"
+      - name: SUPABASE_URL
+        type: "str"
+      - name: SUPABASE_SERVICE_ROLE_KEY
+        type: "str"
+      - name: CULTIVOS_SOPORTADOS
+        type: "set[str]"
+      - name: ENFERMEDADES
+        type: "dict[str, dict]"
+    god_class: false
+    split_candidate: false
+    migration_strategy: copy
+    notes: "This is the backend runtime configuration source for auth, model, and disease metadata."
+
+  - name: app.core.security
+    kind: utility
+    source_loc: "app/core/security.py:1"
+    used_by_units:
+      - crops
+      - plots
+      - samples
+      - diagnoses
+    fields:
+      - name: Usuario
+        type: "app.core.security.Usuario"
+      - name: usuario_actual
+        type: "typing.Callable"
+      - name: id
+        type: "str"
+      - name: email
+        type: "str | None"
+    god_class: false
+    split_candidate: false
+    migration_strategy: wrap
+    notes: "Authentication contract is shared across all protected endpoints and should be preserved as a single boundary."
+
+  - name: app.repository.helpers
+    kind: utility
+    source_loc: "app/repository/helpers.py:1"
+    used_by_units:
+      - crops
+      - plots
+      - samples
+      - diagnoses
+    fields:
+      - name: cargar_lote
+        type: "dict"
+      - name: cargar_cultivo
+        type: "dict"
+      - name: enriquecer_diagnosticos
+        type: "list[dict]"
+      - name: calcular_estado
+        type: "str"
+      - name: tipo
+        type: "dict"
+    god_class: false
+    split_candidate: false
+    migration_strategy: extract
+    notes: "Shared helper functions centralize owner validation and entity enrichment for the Supabase-backed domain model."
+
+  - name: app.services.formatters
+    kind: utility
+    source_loc: "app/services/formatters.py:1"
+    used_by_units:
+      - crops
+      - plots
+      - samples
+    fields:
+      - name: cultivo_json
+        type: "dict"
+      - name: lote_json
+        type: "dict"
+      - name: muestreo_json
+        type: "dict"
+    god_class: false
+    split_candidate: false
+    migration_strategy: copy
+    notes: "Serialization helpers keep response shaping consistent across crop, plot, and sample endpoints."

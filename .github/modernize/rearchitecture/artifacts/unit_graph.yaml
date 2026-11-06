@@ -1,0 +1,168 @@
+units:
+  - name: health
+    trigger: api
+    trigger_detail: "GET /health"
+    source_anchors:
+      - path: app/routers/health.py
+        line: 5
+    exported_signature:
+      - method: "dict health()"
+        source_loc: "app/routers/health.py:7"
+        stability: must_preserve
+    dynamic_entrypoints: []
+    depends_on: []
+    shared_refs:
+      - module: app.config.settings
+        used_fields:
+          - MODEL_VERSION
+
+  - name: crops
+    trigger: api
+    trigger_detail: "GET /crop-types; GET/POST /crops; GET/PATCH/DELETE /crops/{crop_id}"
+    source_anchors:
+      - path: app/routers/crops.py
+        line: 8
+    exported_signature:
+      - method: "dict tipos_de_cultivo()"
+        source_loc: "app/routers/crops.py:10"
+        stability: must_preserve
+      - method: "dict crear_cultivo(CultivoIn)"
+        source_loc: "app/routers/crops.py:14"
+        stability: must_preserve
+      - method: "list[dict] listar_cultivos(bool archived)"
+        source_loc: "app/routers/crops.py:19"
+        stability: must_preserve
+      - method: "dict obtener_cultivo(UUID crop_id)"
+        source_loc: "app/routers/crops.py:23"
+        stability: must_preserve
+      - method: "dict editar_cultivo(UUID crop_id, CultivoPatch body)"
+        source_loc: "app/routers/crops.py:27"
+        stability: must_preserve
+      - method: "dict archivar_cultivo(UUID crop_id)"
+        source_loc: "app/routers/crops.py:32"
+        stability: must_preserve
+    dynamic_entrypoints: []
+    depends_on: []
+    shared_refs:
+      - module: app.config.settings
+        used_fields:
+          - MODEL_VERSION
+          - CULTIVOS_SOPORTADOS
+      - module: app.core.security
+        used_fields:
+          - Usuario
+          - usuario_actual
+      - module: app.repository.helpers
+        used_fields:
+          - cargar_lote
+          - cargar_cultivo
+      - module: app.services.formatters
+        used_fields:
+          - cultivo_json
+
+  - name: plots
+    trigger: api
+    trigger_detail: "GET/POST /crops/{crop_id}/plots; GET/PATCH /plots/{plot_id}"
+    source_anchors:
+      - path: app/routers/plots.py
+        line: 8
+    exported_signature:
+      - method: "dict crear_lote(UUID crop_id, LoteIn body)"
+        source_loc: "app/routers/plots.py:10"
+        stability: must_preserve
+      - method: "list[dict] listar_lotes(UUID crop_id)"
+        source_loc: "app/routers/plots.py:14"
+        stability: must_preserve
+      - method: "dict obtener_lote(UUID plot_id)"
+        source_loc: "app/routers/plots.py:18"
+        stability: must_preserve
+      - method: "dict editar_lote(UUID plot_id, LotePatch body)"
+        source_loc: "app/routers/plots.py:22"
+        stability: must_preserve
+    dynamic_entrypoints: []
+    depends_on:
+      - unit: crops
+        via: "crop ownership and crop_id validation"
+    shared_refs:
+      - module: app.config.settings
+        used_fields:
+          - MODEL_VERSION
+      - module: app.core.security
+        used_fields:
+          - Usuario
+          - usuario_actual
+      - module: app.repository.helpers
+        used_fields:
+          - cargar_lote
+          - cargar_cultivo
+      - module: app.services.formatters
+        used_fields:
+          - lote_json
+
+  - name: samples
+    trigger: api
+    trigger_detail: "POST/GET /plots/{plot_id}/samples"
+    source_anchors:
+      - path: app/routers/samples.py
+        line: 8
+    exported_signature:
+      - method: "dict crear_muestreo(UUID plot_id, MuestreoIn body)"
+        source_loc: "app/routers/samples.py:10"
+        stability: must_preserve
+      - method: "list[dict] historial_muestreos(UUID plot_id, int limit)"
+        source_loc: "app/routers/samples.py:15"
+        stability: must_preserve
+    dynamic_entrypoints: []
+    depends_on:
+      - unit: plots
+        via: "plot ownership and plot_id validation"
+    shared_refs:
+      - module: app.config.settings
+        used_fields:
+          - MODEL_VERSION
+      - module: app.core.security
+        used_fields:
+          - Usuario
+          - usuario_actual
+      - module: app.repository.helpers
+        used_fields:
+          - cargar_lote
+          - calcular_estado
+      - module: app.services.formatters
+        used_fields:
+          - muestreo_json
+
+  - name: diagnoses
+    trigger: api
+    trigger_detail: "POST/GET /diagnoses; GET /diagnoses/{diagnostico_id}"
+    source_anchors:
+      - path: app/routers/diagnoses.py
+        line: 8
+    exported_signature:
+      - method: "dict crear_diagnostico(UUID plot_samples_id, UploadFile file, float latitude?, float longitude?)"
+        source_loc: "app/routers/diagnoses.py:10"
+        stability: must_preserve
+      - method: "list[dict] listar_diagnosticos(int limit, int offset, UUID plot_id?)"
+        source_loc: "app/routers/diagnoses.py:28"
+        stability: must_preserve
+      - method: "dict obtener_diagnostico(UUID diagnostico_id)"
+        source_loc: "app/routers/diagnoses.py:40"
+        stability: must_preserve
+    dynamic_entrypoints: []
+    depends_on:
+      - unit: samples
+        via: "plot_samples_id lookup and ownership validation"
+    shared_refs:
+      - module: app.config.settings
+        used_fields:
+          - MODEL_VERSION
+          - MAX_UPLOAD_MB
+          - CULTIVOS_SOPORTADOS
+      - module: app.core.security
+        used_fields:
+          - Usuario
+          - usuario_actual
+      - module: app.repository.helpers
+        used_fields:
+          - cargar_lote
+          - enriquecer_diagnosticos

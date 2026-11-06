@@ -1,0 +1,8 @@
+unit: plots
+commit: false
+candidate_splits:
+  - drivers:
+      - "lot retrieval aggregates diagnostic history and sample metadata in the same service path"
+    split_target: "app/services/plot_service.py"
+    rationale: "The read path can be split into pure plot-reading logic and an enrichment step for recent diagnostics."
+    source_loc: "app/services/plot_service.py:15-22"

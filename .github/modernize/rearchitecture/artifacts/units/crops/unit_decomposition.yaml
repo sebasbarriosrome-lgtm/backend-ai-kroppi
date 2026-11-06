@@ -1,0 +1,8 @@
+unit: crops
+commit: false
+candidate_splits:
+  - drivers:
+      - "crop CRUD route behavior mixes ownership validation, repository access, and response shaping"
+    split_target: "app/services/crop_service.py"
+    rationale: "The service layer is a natural seam to isolate HTTP validation from Supabase and formatting concerns."
+    source_loc: "app/services/crop_service.py:1-19"

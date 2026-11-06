@@ -10,7 +10,7 @@ from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_TIMEOUT
 log = logging.getLogger("kroppi.gemini")
 
 _client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
-_cache: dict[str, list[str]] = {}   # por enfermedad; se reinicia al reiniciar el servidor
+_cache: dict[str, list[str]] = {}
 
 PROMPT = """Eres un asistente de apoyo para caficultores. Un modelo de visión por computador \
 detectó posiblemente esta condición en una foto de una hoja de café:

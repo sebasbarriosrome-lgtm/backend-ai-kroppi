@@ -1,0 +1,94 @@
+contracts:
+  - name: health-check
+    unit: health
+    type: rest
+    stability: must_preserve
+    source_loc: "app/routers/health.py:7"
+    contract:
+      method: GET
+      path: /health
+      request: "none"
+      response: "{status: 'ok', model_version: '<string>'}"
+      error: "none"
+      auth: "none"
+    target_contract:
+      method: "GET /health"
+      notes: "Target API should return a lightweight status payload and model version without auth."
+    semantic_divergence: []
+
+  - name: crop-catalog-and-crud
+    unit: crops
+    type: rest
+    stability: frozen
+    source_loc: "app/routers/crops.py:10"
+    contract:
+      method: "GET/POST/PATCH/DELETE"
+      path: "/crop-types, /crops, /crops/{crop_id}"
+      request: "JSON body for create/update; bearer JWT required"
+      response: "Crop catalog list or crop record JSON"
+      error: "400/401/404/409 and business-rule messages"
+      auth: "Bearer JWT via Depends(usuario_actual)"
+    target_contract:
+      method: "GET /crop-types; GET/POST /crops; GET/PATCH/DELETE /crops/{crop_id}"
+      notes: "Crop mutations must continue to require ownership checks and archive semantics; hard delete is not used."
+    semantic_divergence:
+      - field: "is_active"
+        issue: "Archived crops are hidden from active listings but still exist in the data set."
+        source_loc: "app/repository/crop_repository.py:91"
+
+  - name: plot-crud-and-aggregation
+    unit: plots
+    type: rest
+    stability: frozen
+    source_loc: "app/routers/plots.py:8"
+    contract:
+      method: "GET/POST/PATCH"
+      path: "/crops/{crop_id}/plots, /plots/{plot_id}"
+      request: "JSON body for create/update; bearer JWT required"
+      response: "Plot records plus latest sample and recent diagnostics when read"
+      error: "400/401/404"
+      auth: "Bearer JWT via Depends(usuario_actual)"
+    target_contract:
+      method: "GET/POST /crops/{crop_id}/plots; GET/PATCH /plots/{plot_id}"
+      notes: "The target API must keep lot-level coordinates and crop ownership validation intact."
+    semantic_divergence: []
+
+  - name: sample-registration
+    unit: samples
+    type: rest
+    stability: frozen
+    source_loc: "app/routers/samples.py:11"
+    contract:
+      method: "POST/GET"
+      path: "/plots/{plot_id}/samples"
+      request: "JSON sample payload with plants_evaluated and plants_affected"
+      response: "Created sample or recent plot sampling history"
+      error: "400/401/404"
+      auth: "Bearer JWT via Depends(usuario_actual)"
+    target_contract:
+      method: "POST /plots/{plot_id}/samples; GET /plots/{plot_id}/samples"
+      notes: "The target API must continue to compute incidence and update plot health status after each sampled observation."
+    semantic_divergence:
+      - field: "status"
+        issue: "Plot state is derived from crop thresholds rather than persisted raw disease logic."
+        source_loc: "app/repository/sample_repository.py:34"
+
+  - name: diagnosis-upload
+    unit: diagnoses
+    type: rest
+    stability: frozen
+    source_loc: "app/routers/diagnoses.py:10"
+    contract:
+      method: "POST/GET"
+      path: "/diagnoses, /diagnoses/{diagnostico_id}"
+      request: "multipart form-data with file + plot_samples_id + optional lat/long; bearer JWT required"
+      response: "diagnosis record with signed image URL, model confidence, disease metadata, and recommendations"
+      error: "400/401/413/502/500"
+      auth: "Bearer JWT via Depends(usuario_actual)"
+    target_contract:
+      method: "POST/GET /diagnoses; GET /diagnoses/{diagnostico_id}"
+      notes: "Target implementations must keep file validation and AI inference orchestration compatible with the current upload contract."
+    semantic_divergence:
+      - field: "image_url"
+        issue: "Signed URLs are created at runtime and may vary in expiration semantics across storage backends."
+        source_loc: "app/services/storage.py:13"

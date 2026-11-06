@@ -1,0 +1,11 @@
+unit: health
+side_effects: []
+branches: []
+error_paths: []
+concurrency:
+  model: async
+  tx_boundary:
+    source_loc: "app/routers/health.py:7"
+    scope: "No DB write or external side effect; returns a static JSON payload."
+    isolation: "none"
+    must_preserve: false

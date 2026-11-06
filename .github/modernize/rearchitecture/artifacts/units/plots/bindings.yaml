@@ -1,0 +1,33 @@
+unit: plots
+bindings:
+  - type: route-declaration
+    name: "POST /crops/{crop_id}/plots"
+    source_loc: "app/routers/plots.py:10"
+    target: "crear_lote"
+    must_appear_in_target: true
+    notes: "Creates a plot under a crop record."
+  - type: route-declaration
+    name: "GET /crops/{crop_id}/plots"
+    source_loc: "app/routers/plots.py:14"
+    target: "listar_lotes"
+    must_appear_in_target: true
+    notes: "Lists all plots for a crop."
+  - type: filter
+    name: "Depends(usuario_actual)"
+    source_loc: "app/routers/plots.py:11"
+    target: "crear_lote"
+    must_appear_in_target: true
+    notes: "Ensures every plot operation is performed under the authenticated user identity."
+runtime_config:
+  - key: SUPABASE_URL
+    source_loc: "app/config/settings.py:6"
+    source: env
+    default_value: "required"
+    must_appear_in_target: true
+    notes: "Required for the repository layer to reach the project database."
+  - key: SUPABASE_SERVICE_ROLE_KEY
+    source_loc: "app/config/settings.py:7"
+    source: env
+    default_value: "required"
+    must_appear_in_target: true
+    notes: "Required for server-side repository queries."

@@ -1,0 +1,35 @@
+unit: samples
+side_effects:
+  - source_loc: "app/repository/sample_repository.py:34-47"
+    effect: "Creates a plot sample and updates the parent plot status and last_sampled_at values."
+    must_preserve: true
+  - source_loc: "app/repository/sample_repository.py:48-59"
+    effect: "Calculates incidence against the crop thresholds and persists the downstream status."
+    must_preserve: true
+branches:
+  - source_loc: "app/repository/sample_repository.py:10-15"
+    condition: "affected plants exceed evaluated plants"
+    behavior: "Rejects the sample as invalid before persisting."
+    must_preserve: true
+  - source_loc: "app/repository/helpers.py:4-9"
+    condition: "incidence threshold crosses alert/danger levels"
+    behavior: "Maps the sample to HEALTHY, ALERT, or DANGER status."
+    must_preserve: true
+error_paths:
+  - source_loc: "app/repository/sample_repository.py:10-15"
+    trigger: "plants_affected > plants_evaluated"
+    outcome: "400 business-rule response"
+    contract: "HTTP 400"
+    must_preserve: true
+  - source_loc: "app/repository/helpers.py:95-110"
+    trigger: "plot does not belong to the authenticated user"
+    outcome: "404 with ownership validation failure"
+    contract: "HTTP 404"
+    must_preserve: true
+concurrency:
+  model: async
+  tx_boundary:
+    source_loc: "app/services/sample_service.py:5-12"
+    scope: "Sample persistence is a single repository call while the plot status is updated in the same round-trip."
+    isolation: "none"
+    must_preserve: false

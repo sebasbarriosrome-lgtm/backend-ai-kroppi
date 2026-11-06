@@ -1,0 +1,40 @@
+unit: crops
+side_effects:
+  - source_loc: "app/repository/crop_repository.py:35-42"
+    effect: "Creates a new crop record tied to a farm and crop type."
+    must_preserve: true
+  - source_loc: "app/repository/crop_repository.py:90-111"
+    effect: "Archives a crop without deleting it, preserving historical continuity."
+    must_preserve: true
+branches:
+  - source_loc: "app/repository/crop_repository.py:69-90"
+    condition: "archivados flag is true or false"
+    behavior: "Returns active or archived crops depending on the request filter."
+    must_preserve: true
+  - source_loc: "app/repository/crop_repository.py:50-58"
+    condition: "crop is inactive or invalid"
+    behavior: "Rejects invalid crop operations with business-rule errors."
+    must_preserve: true
+error_paths:
+  - source_loc: "app/repository/crop_repository.py:26-32"
+    trigger: "farm is not owned by the authenticated user"
+    outcome: "404 business-rule response"
+    contract: "HTTP 404"
+    must_preserve: true
+  - source_loc: "app/repository/crop_repository.py:33-41"
+    trigger: "crop_type_id is invalid or inactive"
+    outcome: "400 business-rule response"
+    contract: "HTTP 400"
+    must_preserve: true
+  - source_loc: "app/repository/crop_repository.py:100-111"
+    trigger: "crop update or archive targets a missing record"
+    outcome: "404 after ownership validation"
+    contract: "HTTP 404"
+    must_preserve: true
+concurrency:
+  model: async
+  tx_boundary:
+    source_loc: "app/services/crop_service.py:5-20"
+    scope: "Single repository call per request; no DB transaction boundary is enforced by the service."
+    isolation: "none"
+    must_preserve: false

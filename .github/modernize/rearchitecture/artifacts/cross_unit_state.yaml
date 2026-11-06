@@ -1,0 +1,30 @@
+flows:
+  - writer:
+      unit: app
+      source_loc: "app/main.py:9-15"
+    reader:
+      unit: diagnoses
+      source_loc: "app/routers/diagnoses.py:12-30"
+    variable: "app.state.http"
+    pairing: matched
+    notes: "The app lifecycle provides a shared AsyncClient for storage and external signed-URL calls."
+
+  - writer:
+      unit: app
+      source_loc: "app/main.py:9-15"
+    reader:
+      unit: diagnoses
+      source_loc: "app/routers/diagnoses.py:12-28"
+    variable: "app.state.classifier"
+    pairing: matched
+    notes: "The classifier singleton is initialized once at startup and reused across diagnosis requests."
+
+  - writer:
+      unit: samples
+      source_loc: "app/repository/sample_repository.py:34-47"
+    reader:
+      unit: plots
+      source_loc: "app/services/plot_service.py:15-22"
+    variable: "plots.status"
+    pairing: matched
+    notes: "Plot status is updated after a fresh sample is saved; the display layer consumes this derived state."

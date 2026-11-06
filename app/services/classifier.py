@@ -5,7 +5,7 @@ from PIL import Image
 
 try:
     from ai_edge_litert.interpreter import Interpreter
-except ImportError:  # alternativa si se instaló tensorflow
+except ImportError:
     from tensorflow.lite.python.interpreter import Interpreter
 
 from app.config import MODEL_CONFIG, TFLITE_PATH
@@ -20,7 +20,7 @@ class Classifier:
         self.interpreter.allocate_tensors()
         self._entrada = self.interpreter.get_input_details()[0]["index"]
         self._salida = self.interpreter.get_output_details()[0]["index"]
-        self._lock = threading.Lock()   # el intérprete no es seguro entre hilos
+        self._lock = threading.Lock()
         self.class_names: list[str] = MODEL_CONFIG["class_names"]
         self.umbral: float = MODEL_CONFIG["umbral"]
         self.tamano = tuple(MODEL_CONFIG["img_size"])

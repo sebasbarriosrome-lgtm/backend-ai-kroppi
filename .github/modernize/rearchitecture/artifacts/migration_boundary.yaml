@@ -1,0 +1,45 @@
+user_intent:
+  raw_request: "Preserve the existing FastAPI backend and Supabase-backed API contract while keeping runtime behavior stable."
+  inferred_acceptance:
+    - "authenticated crop, plot, sample, and diagnosis flows continue to work"
+    - "Supabase-backed storage and database contracts remain valid"
+    - "the app retains current request/response semantics"
+  cleanup_required: false
+strategy: minimal_runtime
+runtime_reachable:
+  - app/main.py
+  - app/routers/health.py
+  - app/routers/crops.py
+  - app/routers/plots.py
+  - app/routers/samples.py
+  - app/routers/diagnoses.py
+  - app/services/crop_service.py
+  - app/services/plot_service.py
+  - app/services/sample_service.py
+  - app/services/diagnosis_service.py
+  - app/repository/crop_repository.py
+  - app/repository/plot_repository.py
+  - app/repository/sample_repository.py
+  - app/repository/diagnosis_repository.py
+must_rewrite:
+  - path: app/main.py
+    reason: "Runtime entrypoint owns startup wiring, middleware, and router registration."
+  - path: app/routers/diagnoses.py
+    reason: "This contract exposes multipart upload semantics, lat/long validation, and auth enforcement."
+  - path: app/services/diagnosis_service.py
+    reason: "This unit owns image validation, inference orchestration, and persistence/cleanup sequencing."
+copy_as_is:
+  - app/services/formatters.py
+  - app/repository/helpers.py
+  - app/schemas/__init__.py
+legacy_allowed_to_remain:
+  - migrations/001_seed_catalogo.sql
+  - migrations/002_storage_y_politicas.sql
+  - app/models/__init__.py
+  - model_files/kroppi_config.json
+defer_cleanup:
+  - "Remove legacy SQL migration artifacts once the live Supabase schema and runtime contract are fully confirmed."
+full_rewrite_reason: null
+implementation_rule: >
+  Implementation scope is the runtime-reachable FastAPI boundary and the Supabase-backed contracts it exposes.
+  It does not expand to every file in the repository as a rewrite target.

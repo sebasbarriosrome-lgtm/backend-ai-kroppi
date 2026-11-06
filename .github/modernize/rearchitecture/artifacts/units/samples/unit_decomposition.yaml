@@ -1,0 +1,8 @@
+unit: samples
+commit: false
+candidate_splits:
+  - drivers:
+      - "the sample service mixes validation, incidence calculation, and persistence side effects"
+    split_target: "app/repository/sample_repository.py"
+    rationale: "A future sample domain module could separate business validation from Supabase writes and plot-status propagation."
+    source_loc: "app/repository/sample_repository.py:7-47"
