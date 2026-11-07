@@ -56,3 +56,14 @@ async def obtener_diagnostico(
     return await diagnosis_service.obtener_diagnostico(
         request.app.state.http, usuario.id, str(diagnostico_id)
     )
+
+
+@router.delete("/diagnoses/{diagnostico_id}", status_code=204)
+async def eliminar_diagnostico(
+    diagnostico_id: UUID,
+    request: Request,
+    usuario: Usuario = Depends(usuario_actual),
+):
+    await diagnosis_service.eliminar_diagnostico(
+        request.app.state.http, usuario.id, str(diagnostico_id)
+    )

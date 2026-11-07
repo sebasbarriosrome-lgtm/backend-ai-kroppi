@@ -66,3 +66,102 @@ def listar_muestreos(user_id: str, plot_id: str, limite: int = 50) -> list[dict]
         or []
     )
     return [muestreo(m) for m in reversed(filas)]
+
+
+def _muestreo_propio(user_id: str, sample_id: str) -> tuple[dict, dict]:
+    filas = (
+        supabase_client.table("plot_samples")
+        .select("*")
+        .eq("id", sample_id)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    if not filas:
+        raise ReglaNegocio(404, "Muestreo no encontrado.")
+    return filas[0], cargar_lote(user_id, filas[0]["plot_id"])
+
+
+def _estado(m: dict, crop_type: dict) -> str:
+    incidencia = round(m["plants_affected"] / m["plants_evaluated"] * 100, 2)
+    return calcular_estado(
+        incidencia, crop_type["alert_threshold_pct"], crop_type["danger_threshold_pct"]
+    )
+
+
+def _sincronizar_lote(lote: dict) -> None:
+    """Estado y fecha del lote según su muestreo más reciente."""
+    ultimo = (
+        supabase_client.table("plot_samples")
+        .select("*")
+        .eq("plot_id", lote["id"])
+        .order("sampled_at", desc=True)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    cambios = (
+        {
+            "status": _estado(ultimo[0], lote["crop"]["crop_type"]),
+            "last_sampled_at": ultimo[0]["sampled_at"],
+        }
+        if ultimo
+        else {"status": "HEALTHY", "last_sampled_at": None}
+    )
+    supabase_client.table("plots").update(cambios).eq("id", lote["id"]).execute()
+
+
+def actualizar_muestreo(user_id: str, sample_id: str, datos: dict) -> dict:
+    actual, lote = _muestreo_propio(user_id, sample_id)
+    evaluadas = datos.get("plants_evaluated", actual["plants_evaluated"])
+    afectadas = datos.get("plants_affected", actual["plants_affected"])
+    if afectadas > evaluadas:
+        raise ReglaNegocio(400, "Las plantas afectadas no pueden superar las evaluadas.")
+
+    payload = {
+        key: value.isoformat() if isinstance(value, datetime) else value
+        for key, value in datos.items()
+    }
+    respuesta = actual
+    if payload:
+        respuesta = (
+            supabase_client.table("plot_samples")
+            .update(payload)
+            .eq("id", sample_id)
+            .execute()
+            .data
+            or [None]
+        )[0]
+        if respuesta is None:
+            raise RuntimeError("Supabase no devolvió el muestreo actualizado.")
+
+    _sincronizar_lote(lote)
+    estado = _estado(respuesta, lote["crop"]["crop_type"])
+    return {
+        **muestreo(respuesta, estado),
+        "incidence_pct": respuesta.get(
+            "incidence_pct", round(afectadas / evaluadas * 100, 2)
+        ),
+    }
+
+
+def eliminar_muestreo(user_id: str, sample_id: str) -> list[str]:
+    """Borra el muestreo y sus diagnósticos. Devuelve las rutas de imagen a limpiar."""
+    _, lote = _muestreo_propio(user_id, sample_id)
+    diagnosticos = (
+        supabase_client.table("diagnostics")
+        .select("id,image_url")
+        .eq("plot_samples_id", sample_id)
+        .execute()
+        .data
+        or []
+    )
+    if diagnosticos:
+        supabase_client.table("diagnostics").delete().eq(
+            "plot_samples_id", sample_id
+        ).execute()
+    supabase_client.table("plot_samples").delete().eq("id", sample_id).execute()
+    _sincronizar_lote(lote)
+    return [d["image_url"] for d in diagnosticos if d.get("image_url")]

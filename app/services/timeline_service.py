@@ -1,5 +1,6 @@
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from fastapi.concurrency import run_in_threadpool as hilo
@@ -8,6 +9,9 @@ from app import config
 from app.core.exceptions import ReglaNegocio
 from app.repository import plot_modules_repository as repo
 from app.services import stats_service
+from app.services.perdidas_calculo import (
+    a_json, dec, formato_kg, formato_moneda, normalizar_estimacion, redondear_monto,
+)
 
 _BOGOTA = ZoneInfo("America/Bogota")
 _TIPOS = {"sample", "diagnosis", "care", "harvest", "loss", "report"}
@@ -152,22 +156,30 @@ async def obtener(
             },
         ))
     for row in data.get("harvest", []):
-        kg = float(row["quantity_kg"])
-        subtitle = f"${float(row['price_per_kg']) * kg:,.0f} COP" if row.get("price_per_kg") is not None else None
+        kg = dec(row["quantity_kg"])
+        price = dec(row.get("price_per_kg"))
+        currency = (row.get("currency") or "COP").strip()
+        value = redondear_monto(kg * price, currency) if price is not None else None
         events.append(_event(row["id"], "harvest", _fecha(row["harvested_at"], True),
-            f"Cosecha: {kg:g} kg", subtitle, "harvests", row["id"],
-            {"harvested_at": row["harvested_at"], "quantity_kg": kg,
-             "price_per_kg": row.get("price_per_kg")}))
+            f"Cosecha: {formato_kg(kg)}",
+            formato_moneda(value, currency) if value is not None else "Sin precio",
+            "harvests", row["id"],
+            a_json({"harvested_at": row["harvested_at"], "quantity_kg": kg,
+                    "price_per_kg": price, "currency": currency, "value": value,
+                    "notes": row.get("notes")})))
     for row in data.get("loss", []):
-        inputs = row.get("inputs") or {}
-        amount = float(row.get("estimated_loss_amount") or 0)
-        lost = float(inputs.get("lost_kg") or 0)
+        e = normalizar_estimacion(row)
+        lost = e["lost_kg"] if e["lost_kg"] is not None else Decimal(0)
+        title = f"Estimación de pérdidas: {formato_kg(lost)}"
+        if e["estimated_loss_amount"] is not None:
+            title += f" · {formato_moneda(e['estimated_loss_amount'], e['currency'])}"
         events.append(_event(row["id"], "loss", _fecha(row["created_at"]),
-            f"Estimación de pérdidas: {lost:g} kg / ${amount:,.0f} COP",
-            row.get("explanation"), "loss_estimations", row["id"],
-            {"lost_kg": inputs.get("lost_kg"), "loss_pct": inputs.get("loss_pct"),
-             "estimated_loss_amount": row.get("estimated_loss_amount"),
-             "explanation": row.get("explanation")}))
+            title, e.get("explanation"), "loss_estimations", row["id"],
+            a_json({"period_from": e["period_from"], "period_to": e["period_to"],
+                    "expected_yield_kg": e["expected_yield_kg"], "harvested_kg": e["harvested_kg"],
+                    "lost_kg": e["lost_kg"], "loss_pct": e["loss_pct"],
+                    "estimated_loss_amount": e["estimated_loss_amount"],
+                    "currency": e["currency"], "explanation": e.get("explanation")})))
     if "report" in types:
         for row in data.get("reports", []):
             occurred = _fecha(row["created_at"])

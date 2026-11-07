@@ -148,3 +148,9 @@ async def listar_diagnosticos(
 async def obtener_diagnostico(http: httpx.AsyncClient, user_id: str, diagnostico_id: str) -> dict:
     registro = await hilo(diagnosis_repository.obtener_diagnostico, user_id, diagnostico_id)
     return (await firmar_diagnosticos(http, [registro]))[0]
+
+
+async def eliminar_diagnostico(http: httpx.AsyncClient, user_id: str, diagnostico_id: str) -> None:
+    ruta = await hilo(diagnosis_repository.eliminar_diagnostico, user_id, diagnostico_id)
+    if ruta:
+        await storage.eliminar_imagen(http, ruta)

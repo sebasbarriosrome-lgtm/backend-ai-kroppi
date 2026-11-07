@@ -1,9 +1,9 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from app.core.security import Usuario, usuario_actual
-from app.schemas import MuestreoIn
+from app.schemas import MuestreoIn, MuestreoPatch
 from app.services import sample_service
 
 router = APIRouter(tags=["muestreos"])
@@ -23,3 +23,19 @@ async def historial_muestreos(
     usuario: Usuario = Depends(usuario_actual),
 ):
     return await sample_service.listar_muestreos(usuario.id, str(plot_id), limit)
+
+
+@router.patch("/samples/{sample_id}")
+async def editar_muestreo(
+    sample_id: UUID, body: MuestreoPatch, usuario: Usuario = Depends(usuario_actual)
+):
+    return await sample_service.actualizar_muestreo(
+        usuario.id, str(sample_id), body.model_dump(exclude_unset=True)
+    )
+
+
+@router.delete("/samples/{sample_id}", status_code=204)
+async def eliminar_muestreo(
+    sample_id: UUID, request: Request, usuario: Usuario = Depends(usuario_actual)
+):
+    await sample_service.eliminar_muestreo(request.app.state.http, usuario.id, str(sample_id))

@@ -81,6 +81,24 @@ def obtener_diagnostico(user_id: str, diagnostico_id: str) -> dict:
     return registro(enriquecer_diagnosticos(filas)[0])
 
 
+def eliminar_diagnostico(user_id: str, diagnostico_id: str) -> str | None:
+    """Borra un diagnóstico propio. Devuelve la ruta de su imagen para limpiarla."""
+    filas = (
+        supabase_client.table("diagnostics")
+        .select("id,image_url")
+        .eq("id", diagnostico_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    if not filas:
+        raise ReglaNegocio(404, "Diagnóstico no encontrado.")
+    supabase_client.table("diagnostics").delete().eq("id", diagnostico_id).execute()
+    return filas[0].get("image_url")
+
+
 def diagnosticos_de_lote(user_id: str, plot_id: str, limite: int = 10) -> list[dict]:
     cargar_lote(user_id, plot_id)
     return listar_diagnosticos(user_id, limite, 0, plot_id)

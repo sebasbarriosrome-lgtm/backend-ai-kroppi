@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
 
 from .base import EstadoSalud, Latitud, Longitud, MetodoMuestreo, OutBase
-from .cosecha import CosechaIn, CosechaOut, CosechaPatch
+from .cosecha import CosechaCrear, CosechaEditar, Moneda
 from .cultivo import CultivoIn, CultivoOut, CultivoPatch
 from .diagnostico import DiagnosticoFeedback, DiagnosticoIn, DiagnosticoOut
-from .estimacion_perdida import EstimacionPerdidaIn, EstimacionPerdidaOut
+from .estimacion_perdida import PerdidaEstimadaCrear, PerdidaEstimadaEditar
 from .finca import FincaIn, FincaOut, FincaPatch
 from .lote import LoteIn, LoteOut, LotePatch
 from .muestreo import MuestreoIn, MuestreoOut, MuestreoPatch
@@ -66,10 +66,10 @@ def diagnostico_json(registro: dict, image_url: str) -> dict:
 __all__ = [
     "EstadoSalud", "Latitud", "Longitud", "MetodoMuestreo", "OutBase",
     "diagnostico_json", "fecha_iso",
-    "CosechaIn", "CosechaOut", "CosechaPatch",
+    "CosechaCrear", "CosechaEditar", "Moneda",
     "CultivoIn", "CultivoOut", "CultivoPatch",
     "DiagnosticoFeedback", "DiagnosticoIn", "DiagnosticoOut",
-    "EstimacionPerdidaIn", "EstimacionPerdidaOut",
+    "PerdidaEstimadaCrear", "PerdidaEstimadaEditar",
     "FincaIn", "FincaOut", "FincaPatch",
     "LoteIn", "LoteOut", "LotePatch",
     "MuestreoIn", "MuestreoOut", "MuestreoPatch",

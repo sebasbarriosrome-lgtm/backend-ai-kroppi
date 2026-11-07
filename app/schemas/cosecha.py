@@ -1,30 +1,32 @@
 from datetime import date
-from uuid import UUID
+from decimal import Decimal
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from .base import OutBase
+Moneda = Literal["COP", "USD"]
 
 
-class CosechaIn(BaseModel):
-    plot_id: UUID
+def _limpiar(value: str | None) -> str | None:
+    value = value.strip() if value is not None else None
+    return value or None
+
+
+class CosechaCrear(BaseModel):
     harvested_at: date
-    quantity_kg: float = Field(gt=0)
-    price_per_kg: float | None = Field(None, ge=0)
+    quantity_kg: Decimal = Field(gt=0)
+    price_per_kg: Decimal | None = Field(None, ge=0)
+    currency: Moneda = "COP"
     notes: str | None = None
 
+    _notas = field_validator("notes")(lambda cls, v: _limpiar(v))
 
-class CosechaPatch(BaseModel):
+
+class CosechaEditar(BaseModel):
     harvested_at: date | None = None
-    quantity_kg: float | None = Field(None, gt=0)
-    price_per_kg: float | None = Field(None, ge=0)
+    quantity_kg: Decimal | None = Field(None, gt=0)
+    price_per_kg: Decimal | None = Field(None, ge=0)
+    currency: Moneda | None = None
     notes: str | None = None
 
-
-class CosechaOut(OutBase):
-    id: UUID
-    plot_id: UUID
-    harvested_at: date
-    quantity_kg: float
-    price_per_kg: float | None = None
-    notes: str | None = None
+    _notas = field_validator("notes")(lambda cls, v: _limpiar(v))

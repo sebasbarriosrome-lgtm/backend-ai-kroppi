@@ -12,7 +12,8 @@ La aplicación integra:
 - autenticación con Supabase Auth/JWT,
 - almacenamiento de imágenes en Supabase Storage,
 - modelado de predicción para enfermedades del café usando TensorFlow Lite,
-- recomendaciones generadas con Gemini cuando la clave de API está configurada.
+- recomendaciones generadas con Gemini cuando la clave de API está configurada,
+- módulos de lote: registro de cuidados agrícolas con evidencia fotográfica, estadísticas, línea de tiempo e informes PDF por lote.
 
 ### Problema que busca resolver
 El proyecto resuelve la necesidad de automatizar la detección temprana de enfermedades en hojas de café a partir de imágenes, integrando el flujo completo entre captura, validación, almacenamiento y análisis de imágenes dentro de una API operativa para productores o técnicos.
@@ -24,12 +25,15 @@ La API ofrece un conjunto de endpoints protegidos por autenticación. Un usuario
 El alcance implementado cubre principalmente:
 - autenticación y autorización por JWT,
 - catálogo de tipos de cultivo,
-- gestión de cultivos, lotes y muestreos,
+- gestión de cultivos, lotes, muestreos y diagnósticos,
 - diagnóstico por imagen con modelo local,
 - almacenamiento de imágenes y firma de URLs temporales,
-- integración con Supabase para persistencia.
+- actividades de cuidado por lote (CRUD) con evidencia en imagen,
+- estadísticas agregadas, línea de tiempo y datos/archivo de informes PDF por lote,
+- cosechas y estimaciones de pérdida con CRUD completo,
+- integración con Supabase para persistencia y storage.
 
-El proyecto no presenta una suite formal de pruebas visible ni un frontend asociado en este repositorio; su alcance actual es un backend API orientado a servicio.
+El repositorio contiene un backend API orientado a servicio y una suite de pruebas automatizadas para la lógica de cosechas, pérdidas y validaciones de negocio. No hay frontend en este repositorio, pero la capa de servicios y rutas HTTP ya incluye el módulo de gestión económica del lote.
 
 ---
 
@@ -42,7 +46,7 @@ El proyecto no presenta una suite formal de pruebas visible ni un frontend asoci
 | Componente | Versión identificada | Propósito |
 |---|---:|---|
 | FastAPI | 0.162.0 | API REST, validación de request/response, dependencias de seguridad |
-| Starlette | 0.10.0 | Base ASGI usada por FastAPI |
+| Starlette | 1.10.0 | Base ASGI usada por FastAPI |
 | Uvicorn | 0.54.0 | Servidor ASGI para ejecutar la aplicación |
 | Pydantic | 2.14.2 | Validación y serialización de modelos |
 | httpx | 0.28.1 | Llamadas HTTP asíncronas a Supabase y otras integraciones |
@@ -51,14 +55,20 @@ El proyecto no presenta una suite formal de pruebas visible ni un frontend asoci
 | numpy | 2.5.4 | Procesamiento de arrays de predicción del modelo |
 | Pillow | 13.0.0 | Preprocesado de imágenes |
 | python-dotenv | 1.2.4 | Carga de variables de entorno desde `.env` |
-| google-genai | no explicitado en requirements, pero usado en `app/services/recommendations.py` | Generación de recomendaciones por Gemini |
+| zoneinfo (stdlib) | n/a | Zona horaria `America/Bogota` en cuidados, estadísticas, línea de tiempo e informes |
+| google-genai | no figura en `requirements.txt`, pero está instalado en `.venv` (2.33.0) y se usa en `app/services/recommendations.py` | Generación de recomendaciones por Gemini |
 | TensorFlow Lite / ai_edge_litert | no listado explícitamente; se intenta importación dinámica | Inferencia del modelo `.tflite` |
 
 ### Herramientas de desarrollo y utilidades
 - `uvicorn` para ejecución local
 - `python-dotenv` para entorno local
 - scripts auxiliares de validación como `probar_modelo.py`
-- `migrations/` para SQL heredado
+- `requirements-dev.txt` con `pytest` para pruebas automatizadas
+- `migrations/` para SQL (001/002 heredadas; 003/004 vigentes, ver sección 6)
+- `.github/modernize/rearchitecture/artifacts/` con artefactos de análisis de arquitectura (contratos, unidades, stack); son documentación generada, no código de ejecución
+- `CREATE_CONTEXT.md` / `UPDATE_CONTEXT.md`: instrucciones para generar y actualizar este documento
+- `repomix-output.xml`: volcado del repositorio generado con repomix (puede estar desactualizado respecto al código)
+- `tests/`: suite de pruebas automatizadas para cosechas, pérdidas y cálculo de series del lote
 
 ### Gestores de paquetes
 - `pip` mediante `requirements.txt`
@@ -72,6 +82,7 @@ El proyecto no presenta una suite formal de pruebas visible ni un frontend asoci
 - `numpy` + `Pillow`: preparación de imágenes para inferencia.
 - `google.genai`: recomendaciones de diagnóstico en lenguaje natural.
 - `python-dotenv`: carga de variables de entorno.
+- `requirements.txt` también fija dependencias transitivas/auxiliares (`cryptography`, `cffi`, `dotenv==0.9.9`, `opentelemetry-api`, etc.). No incluye `ai_edge_litert`/`tensorflow` ni `google-genai`.
 
 ---
 
@@ -96,6 +107,7 @@ flowchart LR
     D --> E[(Supabase DB / Storage)]
     C --> F[Classifier TFLite]
     C --> G[Gemini recommendations]
+    C --> J[Cuidados / Stats / Timeline / Informes]
     B --> H[Security / JWT]
     C --> I[Config / settings]
 ```
@@ -106,7 +118,7 @@ flowchart LR
 - punto de entrada de la aplicación FastAPI,
 - configura `lifespan` para inicializar `Classifier` y `httpx.AsyncClient`,
 - habilita CORS,
-- registra los routers principales,
+- registra los routers (`health`, `crops`, `plots`, `samples`, `diagnoses`, `care`, `harvests`, `losses`, `plot_modules`),
 - maneja excepciones del tipo `ReglaNegocio`.
 
 #### `app/routers/`
@@ -116,6 +128,10 @@ Definen la API HTTP por dominio:
 - `plots.py`: lotes / parcelas
 - `samples.py`: muestreos por lote
 - `diagnoses.py`: diagnósticos por imagen
+- `care.py`: actividades de cuidado por lote y su evidencia
+- `harvests.py`: cosechas del lote con CRUD por fecha, cantidad, precio y moneda
+- `losses.py`: estimaciones de pérdida y validación de traslapes de periodos
+- `plot_modules.py`: estadísticas, línea de tiempo e informes de un lote
 
 #### `app/services/`
 Orquestan la lógica de negocio y flujos de integración:
@@ -127,6 +143,14 @@ Orquestan la lógica de negocio y flujos de integración:
 - `storage.py`: upload/delete/signing de URLs en Storage
 - `recommendations.py`: llamadas a Gemini para sugerir recomendaciones
 - `formatters.py`: serialización de fechas a ISO
+- `care_service.py`: CRUD de cuidados, validación (fecha no futura, cantidad+unidad, código de enfermedad) y evidencia en el bucket `care-evidence`
+- `cosecha_service.py`: CRUD de cosechas con validación de fechas, totales por moneda e impacto en estimaciones
+- `perdida_service.py`: cálculo, preview, validación de traslape y guardado de estimaciones de pérdida
+- `perdidas_calculo.py`: lógica numérica para pérdida esperada, montos, redondeos y mensajes explicativos
+- `tiempo.py`: utilidades de fecha y conversión a zona horaria `America/Bogota`
+- `stats_service.py`: series de incidencia, evolución de salud, desglose de enfermedades, cosechas, ingresos y pérdidas (máx. 3 años, granularidad `week`/`month`)
+- `timeline_service.py`: línea de tiempo paginada (`before`/`next_before`) con eventos `sample`, `diagnosis`, `care`, `harvest`, `loss`, `report`
+- `reports_service.py`: datos consolidados para el informe, subida/listado/consulta/borrado de PDFs en el bucket `reports`
 
 #### `app/repository/`
 Encapsulan las consultas a Supabase y la lógica de acceso a datos:
@@ -134,6 +158,8 @@ Encapsulan las consultas a Supabase y la lógica de acceso a datos:
 - `plot_repository.py`
 - `sample_repository.py`
 - `diagnosis_repository.py`
+- `cosecha_perdida_repository.py`: operaciones para `harvests` y `loss_estimations` con validación de pertenencia por lote
+- `plot_modules_repository.py`: consultas de cuidados, informes, muestreos/cosechas/pérdidas por rango de fechas, diagnósticos y perfil
 - `helpers.py`: utilidades y enriquecimiento de registros
 
 #### `app/core/`
@@ -149,8 +175,13 @@ Encapsulan las consultas a Supabase y la lógica de acceso a datos:
 #### `app/db/session.py`
 - crea el cliente de Supabase con `create_client`.
 
+#### `app/models/__init__.py`
+- `TypedDict` que describen filas del esquema (`CropType`, `Crop`, `Plot`, `PlotSample`, `Diagnosis`, `Farm`, `Profile`, `User`, `Harvest`, `LossEstimation`). No incluye todos los tipos de módulos recientes (`care_activities`, `plot_reports`, etc.) pero se mantienen para compatibilidad.
+
 #### `app/schemas/`
 - Define DTOs y helpers serializadores, especialmente `fecha_iso`, `diagnostico_json`.
+- `cuidado.py` (`CuidadoCrear`, `CuidadoPatch`, tipos de actividad/unidad/método) y `modulos_lote.py` (`InformePeriodo`, `Granularidad`, `TipoEvento`) soportan los módulos de lote.
+- `cosecha.py` y `estimacion_perdida.py` modelan las operaciones CRUD de cosechas y pérdidas; `finca.py`, `perfil.py`, `usuario.py` y otros DTOs existen para el esquema de dominio y validación del backend.
 - El proyecto usa Pydantic para validación de request/response.
 
 ### Principios de diseño identificables
@@ -169,14 +200,21 @@ Encapsulan las consultas a Supabase y la lógica de acceso a datos:
 ```text
 kroppi_backend/
 ├── README.md
+├── CREATE_CONTEXT.md
+├── UPDATE_CONTEXT.md
+├── PROJECT_CONTEXT.md
+├── repomix-output.xml
 ├── requirements.txt
 ├── probar_modelo.py
+├── .github/modernize/rearchitecture/artifacts/   (architecture_index.md, unit_graph.yaml, wire_contracts.yaml, units/*, ...)
 ├── model_files/
 │   ├── kroppi_cafe_v2.tflite
 │   └── kroppi_config.json
 ├── migrations/
 │   ├── 001_seed_catalogo.sql
-│   └── 002_storage_y_politicas.sql
+│   ├── 002_storage_y_politicas.sql
+│   ├── 003_modulos_lote.sql
+│   └── 004_validar_area_lotes.sql
 ├── pruebas/
 │   ├── roya1.jpg
 │   ├── roya2.jpg
@@ -204,38 +242,47 @@ kroppi_backend/
 │   │   ├── crop_repository.py
 │   │   ├── diagnosis_repository.py
 │   │   ├── helpers.py
+│   │   ├── plot_modules_repository.py
 │   │   ├── plot_repository.py
 │   │   └── sample_repository.py
 │   ├── routers/
 │   │   ├── __init__.py
+│   │   ├── care.py
 │   │   ├── crops.py
 │   │   ├── diagnoses.py
 │   │   ├── health.py
+│   │   ├── plot_modules.py
 │   │   ├── plots.py
 │   │   └── samples.py
 │   ├── schemas/
 │   │   ├── __init__.py
 │   │   ├── base.py
 │   │   ├── cosecha.py
+│   │   ├── cuidado.py
 │   │   ├── cultivo.py
 │   │   ├── diagnostico.py
 │   │   ├── estimacion_perdida.py
 │   │   ├── finca.py
 │   │   ├── lote.py
+│   │   ├── modulos_lote.py
 │   │   ├── muestreo.py
 │   │   ├── perfil.py
 │   │   ├── tipo_cultivo.py
 │   │   └── usuario.py
 │   └── services/
 │       ├── __init__.py
+│       ├── care_service.py
 │       ├── classifier.py
 │       ├── crop_service.py
 │       ├── diagnosis_service.py
 │       ├── formatters.py
 │       ├── plot_service.py
 │       ├── recommendations.py
+│       ├── reports_service.py
 │       ├── sample_service.py
-│       └── storage.py
+│       ├── stats_service.py
+│       ├── storage.py
+│       └── timeline_service.py
 └── .env (no incluido en el repo y requerido para ejecución local)
 ```
 
@@ -249,7 +296,8 @@ kroppi_backend/
 - `app/services/`: lógica de negocio, almacenamiento, inferencia y recomendaciones.
 - `app/schemas/`: validación y serialización.
 - `model_files/`: artefactos del modelo y configuración.
-- `migrations/`: scripts SQL heredados.
+- `migrations/`: scripts SQL (001/002 heredados; 003 crea cuidados/informes/buckets; 004 valida áreas).
+- `.github/modernize/`: artefactos de análisis arquitectónico (documentación auxiliar).
 - `pruebas/`: imágenes de ejemplo para validación manual del modelo.
 
 ### Puntos de entrada
@@ -308,7 +356,10 @@ sequenceDiagram
   - fechas de siembra y cosecha estimada,
   - que `plants_affected <= plants_evaluated`,
   - formato y tamaño de imagen,
-  - latitud/longitud como par obligatorio o nulo.
+  - latitud/longitud como par obligatorio o nulo,
+  - cuidados: fecha de aplicación no futura (zona `America/Bogota`), cantidad y unidad enviadas juntas, `target_disease_code` debe existir en `ENFERMEDADES` y no ser `cafe_sano`, imagen de evidencia JPG/PNG/WEBP ≤ 10 MB cuyo MIME coincida con el contenido,
+  - estadísticas: `from <= to` y periodo máximo de 3 años; línea de tiempo: tipos de evento válidos y `from <= to`,
+  - informes: PDF válido (`application/pdf` con cabecera `%PDF`) ≤ 15 MB y `period_from <= period_to`.
 
 ### Estado compartido
 - El estado de la aplicación se guarda en `app.state` durante el `lifespan` de FastAPI:
@@ -322,6 +373,9 @@ sequenceDiagram
 - `storage.py` realiza upload/delete/signing de URLs en Supabase Storage.
 - `recommendations.py` intenta generar sugerencias con Gemini, y si no hay clave configurada devuelve recomendaciones vacías sin romper el diagnóstico.
 - `classifier.py` prepara la imagen para TensorFlow Lite y ejecuta la inferencia con un lock de hilo para proteger el intérprete.
+- `care_service.py`: verifica propiedad del lote, valida y guarda cuidados; al subir evidencia sube a `care-evidence`, actualiza `evidence_path` (con limpieza del objeto si falla el registro) y borra la evidencia reemplazada. Las URLs de evidencia se firman al responder (502 si falla la firma).
+- `stats_service.py` / `timeline_service.py` / `reports_service.py` consultan en paralelo (`asyncio.gather` + threadpool) muestreos, cosechas, pérdidas, cuidados y diagnósticos de un lote. El estado de incidencia se clasifica con los umbrales del tipo de cultivo (`sano`/`alerta`/`peligro`). La enfermedad de un diagnóstico se toma de `predicted_label`, `ai_prediction.disease_code` o, si falta, del top-1 con confianza ≥ `umbral` del modelo.
+- `reports_service.py`: `GET report-data` arma el contenido del informe (identificación, muestras, fotos firmadas, cuidados, cosechas, pérdidas, conclusiones con aviso de resultados orientativos); `POST reports` recibe el PDF ya generado por el cliente, lo guarda en `reports/{user_id}/{plot_id}/{report_id}.pdf` y registra un resumen en `plot_reports`. El PDF no se genera en el backend.
 
 ---
 
@@ -341,8 +395,10 @@ La aplicación hace referencia a estas tablas en código:
 | `plots` | lotes / parcelas dentro de un cultivo |
 | `plot_samples` | muestreos de incidencias por parcela |
 | `diagnostics` | registros de diagnósticos e imágenes |
-| `harvests` | mencionada en README pero no aparece en la capa actual de rutas |
-| `loss_estimations` | mencionada en README pero no aparece en la capa actual de rutas |
+| `care_activities` | actividades de cuidado por lote (tipo, producto, cantidad, método, costo, evidencia) |
+| `plot_reports` | informes PDF por lote (periodo, ruta de archivo, tamaño, resumen JSON) |
+| `harvests` | cosechas por lote; se gestionan con CRUD por fecha, cantidad, valor y moneda |
+| `loss_estimations` | estimaciones de pérdida por lote; se calculan, validan y editan con preview + guardado |
 | `profiles` / `users` | perfil de usuario y autenticación |
 
 ### Relaciones identificadas
@@ -354,6 +410,10 @@ erDiagram
     CROPS ||--o{ PLOTS : includes
     PLOTS ||--o{ PLOT_SAMPLES : records
     PLOT_SAMPLES ||--o{ DIAGNOSTICS : generates
+    PLOTS ||--o{ CARE_ACTIVITIES : has
+    PLOTS ||--o{ PLOT_REPORTS : has
+    PLOTS ||--o{ HARVESTS : yields
+    PLOTS ||--o{ LOSS_ESTIMATIONS : estimates
     CROPS }o--|| CROP_TYPES : categorized_by
 ```
 
@@ -364,6 +424,8 @@ Relaciones observadas en código:
 - `plots.crop_id` -> `crops.id`
 - `plot_samples.plot_id` -> `plots.id`
 - `diagnostics.plot_samples_id` -> `plot_samples.id`
+- `care_activities.plot_id` / `plot_reports.plot_id` -> `plots.id` (`on delete cascade`); `created_by` -> `profiles.id`
+- `harvests` y `loss_estimations` se filtran por `plot_id` (según las consultas del repositorio)
 
 ### Operaciones de lectura y escritura
 Las consultas se ejecutan a través de `supabase_client.table(...).select(...)`, `insert(...)`, `update(...)`, `eq(...)`, `limit(...)`, `in_(...)` y `order(...)`.
@@ -373,12 +435,15 @@ Algunos ejemplos concretos:
 - `plot_repository.py`: crear lotes, listar lotes, obtener lote con muestra reciente, actualizar coordenadas.
 - `sample_repository.py`: registrar muestreos y actualizar `plots.status`.
 - `diagnosis_repository.py`: obtener diagnóstico por contexto de muestra, listar diagnósticos, guardar diagnóstico.
+- `plot_modules_repository.py`: CRUD de `care_activities`, crear/listar/borrar `plot_reports`, lecturas por rango de fechas de `plot_samples`, `harvests`, `loss_estimations`, `diagnostics`, y consulta de `profiles`.
 
 ### Migraciones y configuración
 - `migrations/001_seed_catalogo.sql`
 - `migrations/002_storage_y_politicas.sql`
+- `migrations/003_modulos_lote.sql`: crea `care_activities` y `plot_reports` (checks de dominio, índices por lote/fecha, trigger `updated_at`), habilita RLS con políticas por propietario (lote → cultivo → finca → `owner_id = auth.uid()`), crea los buckets privados `care-evidence` (10 MB; JPEG/PNG/WEBP) y `reports` (15 MB; PDF) con políticas por carpeta `{user_id}/...`.
+- `migrations/004_validar_area_lotes.sql`: triggers `plots_farm_area_limit` y `farms_area_limit` que impiden que la suma de `area_ha` de los lotes supere el área de la finca (error `23514`) y que el área de la finca baje por debajo de lo ocupado.
 
-El README indica que estas migraciones pertenecen a un esquema inicial y no deben aplicarse sobre el esquema actual sin revisión. Esto sugiere que el proyecto se ha evolucionado desde un primer diseño base y ahora depende de un esquema Supabase ya existente.
+El README indica que las migraciones 001 y 002 pertenecen a un esquema inicial y no deben aplicarse sobre el esquema actual sin revisión (el README no menciona 003 ni 004). El proyecto ha evolucionado desde un primer diseño base y depende de un esquema Supabase ya existente; 003 y 004 corresponden al esquema actual.
 
 ---
 
@@ -405,6 +470,20 @@ Con base en `app/routers/` y `README.md`:
 | POST | `/diagnoses` | crea diagnóstico a partir de imagen |
 | GET | `/diagnoses` | lista diagnósticos |
 | GET | `/diagnoses/{diagnostico_id}` | detalle de diagnóstico |
+| POST | `/plots/{plot_id}/care-activities` | crea actividad de cuidado |
+| GET | `/plots/{plot_id}/care-activities` | lista cuidados (filtros `from`, `to`, `type`, `limit` 1-200, `offset`) |
+| GET | `/care-activities/{activity_id}` | detalle de cuidado con URL firmada de evidencia |
+| PATCH | `/care-activities/{activity_id}` | actualiza cuidado |
+| DELETE | `/care-activities/{activity_id}` | elimina cuidado y su evidencia (204) |
+| PUT | `/care-activities/{activity_id}/evidence` | sube/reemplaza evidencia (multipart `file`) |
+| DELETE | `/care-activities/{activity_id}/evidence` | elimina la evidencia (204) |
+| GET | `/plots/{plot_id}/stats` | estadísticas (`from`, `to`, `granularity` = `week` o `month`; por defecto últimos ~6 meses) |
+| GET | `/plots/{plot_id}/timeline` | línea de tiempo (`from`, `to`, `types`, `limit` 1-200, `before`) |
+| GET | `/plots/{plot_id}/report-data` | datos consolidados para el informe (`from`, `to` obligatorios) |
+| POST | `/plots/{plot_id}/reports` | registra un informe PDF (multipart `period_from`, `period_to`, `file`) |
+| GET | `/plots/{plot_id}/reports` | lista informes del lote |
+| GET | `/reports/{report_id}` | detalle con URL firmada del PDF |
+| DELETE | `/reports/{report_id}` | elimina informe y archivo (204) |
 
 ### Parámetros y estructuras
 - `POST /diagnoses` recibe `multipart/form-data` con:
@@ -413,6 +492,7 @@ Con base en `app/routers/` y `README.md`:
   - `latitude` (opcional)
   - `longitude` (opcional)
 - Los campos `latitude` y `longitude` se validan como par: ambos presentes o ambos ausentes.
+- Los endpoints de cuidados reciben JSON (`CuidadoCrear` / `CuidadoPatch`) con `applied_at`, `activity_type` (`FERTILIZATION`, `FUNGICIDE`, `INSECTICIDE`, `HERBICIDE`, `PRUNING`, `WEEDING`, `IRRIGATION`, `CULTURAL_CONTROL`, `OTHER`), y opcionales `product_name`, `active_ingredient`, `quantity` (>0) + `quantity_unit` (`kg`, `g`, `L`, `mL`, `unit`), `application_method`, `target_disease_code`, `cost` (≥0), `notes`.
 - Los índices `limit`, `offset`, `archived`, `plot_id` se validan con límites de rango en FastAPI `Query` o `bool`.
 
 ### Autenticación y autorización
@@ -423,7 +503,7 @@ Con base en `app/routers/` y `README.md`:
 
 ### Integraciones externas
 - Supabase Auth: autenticación y validación JWT.
-- Supabase Storage: almacenamiento de imágenes y generación de URLs temporales.
+- Supabase Storage: tres buckets — `diagnosticos` (configurable con `SUPABASE_BUCKET`), `care-evidence` y `reports` (nombres fijos en el código) — con URLs firmadas temporales (`SIGNED_URL_SEGUNDOS = 3600`).
 - Supabase Database: persistencia de registros estructurados.
 - Modelo TFLite local: predicción de enfermedad.
 - Gemini (`google.genai`): recomendaciones para productores.
@@ -442,6 +522,8 @@ Con base en `app/routers/` y `README.md`:
 - Ejemplos:
   - `crop_repository.py` verifica `farms.owner_id == user_id` antes de consultar cultivos.
   - `diagnosis_repository.py` filtra por `user_id` y el muestreo perteneciente al lote.
+- Los módulos de lote (`care`, `plot_modules`) verifican la propiedad con `lote_propietario` (`cargar_lote`) antes de operar; para cuidados e informes se resuelve primero la fila por id y luego se valida la propiedad de su `plot_id`.
+- La migración 003 define además RLS y políticas de storage por propietario como defensa en profundidad; el backend usa la service role key, que las omite, por lo que la validación en código es la barrera efectiva.
 
 ### Protección de información
 - El proyecto evita confiar en `user_id` enviado por el cliente; el usuario real se infiere del JWT verificado.
@@ -457,7 +539,7 @@ Con base en `app/routers/` y `README.md`:
 
 ### Validaciones aplicadas
 - tipos de imagen permitidos: JPEG, PNG y WEBP,
-- tamaño de archivo máximo: 10 MB (`MAX_UPLOAD_MB`),
+- tamaño de archivo máximo: 10 MB (`MAX_UPLOAD_MB`) en diagnósticos; evidencia de cuidados 10 MB y PDFs de informe 15 MB (límites fijos en el código y en los buckets),
 - validación de latitud/longitud,
 - restricciones combinadas con `Query(ge=..., le=...)`,
 - validación de cuántas plantas afectadas no pueden exceder a las evaluadas.
@@ -471,7 +553,7 @@ Con base en `app/routers/` y `README.md`:
 - acceso a un proyecto Supabase con:
   - URL del proyecto,
   - service role key,
-  - bucket para almacenamiento,
+  - buckets para almacenamiento (`diagnosticos`, `care-evidence`, `reports`; los dos últimos se crean con `migrations/003_modulos_lote.sql`),
   - esquema de tablas compatible con la API.
 - presencia de `model_files/kroppi_cafe_v2.tflite` y `model_files/kroppi_config.json`
 
@@ -508,7 +590,14 @@ python probar_modelo.py pruebas/sana1.jpg pruebas/roya1.jpg
 ```
 
 ### Ejecución de pruebas
-No se detectaron pruebas automatizadas formales con `pytest`, `unittest` o un framework de test definido en el repositorio. El único script de verificación disponible se basa en la ejecución del modelo a partir de imágenes de ejemplo.
+El repositorio sí incluye pruebas automatizadas con `pytest` mediante `requirements-dev.txt` y la suite `tests/`. La ejecución principal es:
+
+```bash
+pip install -r requirements-dev.txt
+pytest tests
+```
+
+Además, el script `probar_modelo.py` sigue siendo útil para verificar el comportamiento del modelo sin depender de la API.
 
 ---
 
@@ -518,26 +607,28 @@ No se detectaron pruebas automatizadas formales con `pytest`, `unittest` o un fr
 Se observan estas evidencias:
 - carpeta `pruebas/` con imágenes de hoja sana y con enfermedad,
 - script `probar_modelo.py` para verificar el comportamiento del modelo sin depender de la API,
-- validaciones a nivel de API y negocio en código (`HTTPException`, `ReglaNegocio`, `Query` limits).
+- suite `tests/test_cosecha_perdida.py` con pruebas de cálculo, validaciones de negocio, fechas, estimaciones y avisos,
+- doble en memoria de Supabase en `tests/conftest.py` para ejecutar la lógica sin red externa.
 
 ### Frameworks de testing
-No se detecta un framework de testing configurado ni archivos de tests en el repositorio visible.
+El repositorio usa `pytest` (definido en `requirements-dev.txt`) y la suite principal se ejecuta desde `tests/`.
 
 ### Cobertura
-No se documenta ninguna cobertura ni pipeline de CI/CD en el código analizado.
+La cobertura documentada es parcial y se centra en la lógica de cosechas, pérdidas y cálculos del módulo de lote; no hay evidencia de pruebas de API HTTP ni de integración con Supabase storage.
 
 ### Validaciones automáticas
 - validación de rutas y parámetros por FastAPI,
 - validación del JWT,
 - validación de imágenes,
 - validación de reglas de negocio en repository/service,
-- chequeos sobre `GEMINI_API_KEY` y configuración del modelo.
+- chequeos sobre `GEMINI_API_KEY` y configuración del modelo,
+- pruebas de regresión con `pytest` para los cálculos de cosecha y pérdida.
 
 ### Problemas conocidos
 - Si faltan variables críticas de entorno, la importación de `app/config/settings.py` falla con `RuntimeError`.
 - La API depende fuertemente de Supabase, por lo que la disponibilidad de la base y del storage es un requisito de ejecución.
 - El manejo de recomendaciones de Gemini es opcional y, si falla, devuelve un arreglo vacío sin interrumpir el diagnóstico.
-- El proyecto no documenta una estrategia de pruebas automatizadas robusta.
+- La validación del módulo de lote está bien cubierta para cálculos y reglas, pero aún no se ha ampliado a pruebas end-to-end completas.
 
 ---
 
@@ -552,19 +643,27 @@ No se documenta ninguna cobertura ni pipeline de CI/CD en el código analizado.
 - guardado de diagnósticos y metadatos
 - firma temporal de URLs de imagen
 - integraciones con Supabase
+- cuidados por lote con evidencia fotográfica
+- cosechas por lote con validación de fecha y totales por moneda
+- estimaciones de pérdida con preview, cálculos, validación de traslape y edición
+- estadísticas, línea de tiempo y datos de informe por lote
+- almacenamiento y consulta de informes PDF (el PDF lo genera el cliente)
+- validación de área de lotes frente a la finca (trigger SQL, migración 004)
 
 ### Funcionalidades parcialmente implementadas o dependientes de configuración
 - generación de recomendaciones con Gemini: funcional si `GEMINI_API_KEY` está configurada
 - soporte de cultivos: restringido a `CULTIVOS_SOPORTADOS = {'cafe'}`
 - integración con `Supabase Bucket`: depende de la existencia de `SUPABASE_BUCKET` y del bucket físico en la cuenta de Supabase
+- `google-genai` y el runtime TFLite no están en `requirements.txt`; deben instalarse aparte
+- la lógica de pérdidas y cosechas sigue siendo específica del dominio del café y depende de la integración con Supabase para persistencia
 
 ### Funcionalidades pendientes o no verificadas en este repositorio
-- pruebas automatizadas,
-- pipelines de CI/CD,
+- pipelines de CI/CD más completos,
 - documentación de despliegue para producción,
 - esquema formal de migración para el modelo y tablas actuales,
 - soporte de otros cultivos o más modelos,
-- observabilidad, métricas y monitoreo más avanzados.
+- observabilidad, métricas y monitoreo más avanzados,
+- ampliación de la suite de pruebas para rutas HTTP, storage y diagnóstico end-to-end.
 
 ### Limitaciones identificadas
 - la API está acoplada a Supabase y a sus nombres de tablas,
@@ -575,8 +674,11 @@ No se documenta ninguna cobertura ni pipeline de CI/CD en el código analizado.
 ### Deuda técnica identificable
 - dependencia de nombres concretos de tablas y consultas en Supabase,
 - uso de config estática para catálogo de enfermedades y comportamiento del modelo,
-- ausencia de tests automatizados,
-- ausencia de documentación de despliegue y operación.
+- la suite de tests automatizados cubre la lógica de negocio principal, pero todavía no incluye validación end-to-end de la API ni pruebas de storage,
+- ausencia de documentación de despliegue y operación,
+- `stats_service`, `timeline_service` y `reports_service` repiten la extracción del código de enfermedad y el cálculo de periodos, y `timeline_service`/`reports_service` usan el helper privado `stats_service._status`,
+- los límites de subida de los routers de lote (10 MB / 15 MB) están fijos en el código, separados de `MAX_UPLOAD_MB`,
+- `app/models` y `app/schemas` incluyen definiciones sin uso en las rutas actuales.
 
 ---
 
@@ -591,6 +693,8 @@ No se documenta ninguna cobertura ni pipeline de CI/CD en el código analizado.
    - lotes: `app/routers/plots.py` + `app/services/plot_service.py` + `app/repository/plot_repository.py`
    - muestreos: `app/routers/samples.py` + `app/services/sample_service.py` + `app/repository/sample_repository.py`
    - diagnósticos: `app/routers/diagnoses.py` + `app/services/diagnosis_service.py` + `app/repository/diagnosis_repository.py`
+   - cuidados: `app/routers/care.py` + `app/services/care_service.py` + `app/repository/plot_modules_repository.py` + `app/schemas/cuidado.py`
+   - estadísticas, línea de tiempo e informes: `app/routers/plot_modules.py` + `app/services/{stats,timeline,reports}_service.py` + `app/repository/plot_modules_repository.py`
 5. Ejecutar la app con `uvicorn app.main:app --reload` después de definir `.env`.
 
 ### Convenciones de código observadas
@@ -613,6 +717,9 @@ No se documenta ninguna cobertura ni pipeline de CI/CD en el código analizado.
 - no modificar los nombres de las tablas sin revisar todo el repositorio y el esquema actual,
 - al tocar diagnósticos, revisar `app/services/storage.py` y `app/services/classifier.py`,
 - al tocar JWT/autenticación, revisar `app/core/security.py` y la forma en que se validan permisos por `owner_id`,
+- los módulos de lote usan la zona horaria `America/Bogota` para fechas y rangos; mantener esa convención,
+- al tocar cuidados/informes, revisar `migrations/003_modulos_lote.sql` (checks, RLS, buckets) y mantener sincronizados los enums de `app/schemas/cuidado.py`,
+- `plots.area_ha` está limitado por el área de la finca mediante triggers SQL (migración 004); los errores `23514` provienen de la base de datos,
 - al cambiar el modelo, revisar `model_files/kroppi_config.json` y la forma en que se interpreta la salida del clasificador.
 
 ---
@@ -622,3 +729,28 @@ No se documenta ninguna cobertura ni pipeline de CI/CD en el código analizado.
 El repositorio corresponde a un backend FastAPI dedicado a la gestión agrícola y al diagnóstico de enfermedades del café mediante visión artificial. Su núcleo está en la integración entre Supabase (persistencia y storage), una API autenticada y un modelo TFLite para clasificación de imágenes. La aplicación se encuentra en un estado funcional para su dominio principal, pero con limitaciones claras en cuanto a cobertura de pruebas, despliegue y documentación operativa.
 
 La información aquí documentada se basa en el análisis del código fuente actual y en los artefactos y rutas explícitos del proyecto. Los puntos que no pueden verificarse con certeza se indican como tales.
+
+---
+
+## Historial de actualizaciones
+
+### 2026-11-07
+**Resumen:** sincronización del documento con el estado real del repositorio: los módulos de cosechas y estimaciones de pérdida ya tienen rutas y lógica de negocio implementadas, y la base de pruebas automatizadas con `pytest` ya está presente en `tests/`.
+
+**Nuevos componentes documentados**
+- Routers `harvests.py` y `losses.py` con CRUD de cosechas y estimaciones de pérdida.
+- Servicios `cosecha_service.py`, `perdida_service.py`, `perdidas_calculo.py` y `tiempo.py`.
+- Repositorio `cosecha_perdida_repository.py` para acceso a `harvests` y `loss_estimations`.
+- Esquemas `cosecha.py` y `estimacion_perdida.py` para validación del módulo económico del lote.
+- Suite `tests/test_cosecha_perdida.py` + `tests/conftest.py` con doble de Supabase en memoria.
+- Dependencia `pytest` en `requirements-dev.txt`.
+
+**Componentes modificados / corregidos**
+- Se actualiza la lista de routers registrados en `app/main.py` para incluir `harvests` y `losses`.
+- Se corrige la descripción del alcance del proyecto: cosechas y pérdidas ya tienen CRUD, no solo lectura para reportes.
+- Se reemplaza la referencia a ausencia de pruebas automatizadas por la realidad actual del repositorio.
+- Se ajusta la sección de deuda técnica para reflejar que la lógica principal ya está cubierta por pruebas, aunque faltan pruebas de API/storage end-to-end.
+
+**Eliminados:** ninguno.
+
+**Secciones afectadas:** 1, 2, 3, 4, 5, 8, 9, 10, 11 y 12. La sección final de conclusión también se mantiene, pero con la información actualizada del repositorio.

@@ -1,12 +1,15 @@
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from fastapi.concurrency import run_in_threadpool as hilo
 
 from app import config
 from app.core.exceptions import ReglaNegocio
+from app.repository import cosecha_perdida_repository
 from app.repository import plot_modules_repository as repo
+from app.services.perdidas_calculo import dec, normalizar_estimacion, redondear_kg, redondear_monto
 
 _BOGOTA = ZoneInfo("America/Bogota")
 
@@ -115,55 +118,7 @@ async def obtener(
         {"period": period, "disease_code": code, "count": disease_periods[(period, code)]}
         for period in periods for code in disease_counts
     ]
-    harvest_by_period: dict[str, dict] = defaultdict(lambda: {"kg": 0.0, "revenue_cop": 0.0})
-    harvests_without_price = 0
-    revenue = 0.0
-    harvested = 0.0
-    for row in harvests:
-        period = _period_key(row["harvested_at"], granularidad)
-        quantity = float(row["quantity_kg"])
-        harvested += quantity
-        harvest_by_period[period]["kg"] += quantity
-        if row.get("price_per_kg") is None:
-            harvests_without_price += 1
-        else:
-            value = quantity * float(row["price_per_kg"])
-            revenue += value
-            harvest_by_period[period]["revenue_cop"] += value
-    harvest_series = [
-        {"period": period, **harvest_by_period[period]}
-        for period in periods
-    ]
-
-    loss_by_period: dict[str, dict] = defaultdict(lambda: {"lost_kg": 0.0, "loss_amount_cop": 0.0})
-    loss_amount = 0.0
-    for row in losses:
-        inputs = row.get("inputs") or {}
-        period = _period_key(row["created_at"], granularidad)
-        amount = float(row.get("estimated_loss_amount") or 0)
-        lost = float(inputs.get("lost_kg") or 0)
-        loss_by_period[period]["lost_kg"] += lost
-        loss_by_period[period]["loss_amount_cop"] += amount
-        loss_amount += amount
-    loss_series = []
-    cumulative = 0.0
-    for period in periods:
-        values = loss_by_period[period]
-        cumulative += values["loss_amount_cop"]
-        loss_series.append({
-            "period": period, **values,
-            "cumulative_loss_amount_cop": cumulative,
-        })
-    income_cumulative = 0.0
-    income_series = []
-    for period in periods:
-        values = harvest_by_period[period]["revenue_cop"]
-        income_cumulative += values
-        income_series.append({
-            "period": period, "revenue_cop": values,
-            "cumulative_revenue_cop": income_cumulative,
-        })
-
+    money = _money_series(harvests, losses, periods, granularidad)
     incidences = [item["incidence_pct"] for item in incidence_series]
     return {
         "plot_id": plot_id,
@@ -176,17 +131,19 @@ async def obtener(
         "health_evolution": health,
         "disease_breakdown": disease_breakdown,
         "disease_over_time": disease_over_time,
-        "harvest_series": harvest_series,
-        "loss_series": loss_series,
-        "income_series": income_series,
-        "harvests_without_price": harvests_without_price,
+        "harvest_series": money["harvest_series"],
+        "loss_series": money["loss_series"],
+        "income_series": money["income_series"],
+        "expected_vs_harvested": money["expected_vs_harvested"],
+        "harvests_without_price": money["harvests_without_price"],
+        "currency": money["currency"],
+        "mixed_currency": money["mixed_currency"],
+        "excluded_other_currency": money["excluded_other_currency"],
         "totals": {
             "samples": len(samples),
             "avg_incidence_pct": round(sum(incidences) / len(incidences), 2) if incidences else 0,
             "max_incidence_pct": max(incidences, default=0),
-            "harvested_kg": harvested,
-            "revenue_cop": revenue,
-            "loss_amount_cop": loss_amount,
+            **money["totals"],
             "care_cost_cop": sum(float(item.get("cost") or 0) for item in care),
         },
     }
@@ -194,12 +151,113 @@ async def obtener(
 
 async def _fetch_series(plot_id: str, start: date, end: date):
     import asyncio
-    return await asyncio.gather(
+    samples, harvests, estimations, care = await asyncio.gather(
         hilo(repo.muestreos, plot_id, start, end),
         hilo(repo.cosechas, plot_id, start, end),
-        hilo(repo.perdidas, plot_id, start, end),
+        hilo(cosecha_perdida_repository.estimaciones, plot_id),
         hilo(repo.cuidados, plot_id, start, end),
     )
+    return samples, harvests, estimaciones_del_rango(estimations, start, end), care
+
+
+def estimaciones_del_rango(rows: list[dict], start: date, end: date) -> list[dict]:
+    """Estimaciones (normalizadas) cuyo `period_to` cae en el rango, por fecha de fin."""
+    normalized = [normalizar_estimacion(row) for row in rows]
+    selected = [e for e in normalized if e["period_to"] and start <= e["period_to"] <= end]
+    return sorted(selected, key=lambda e: e["period_to"])
+
+
+def _currency(row: dict) -> str:
+    return (row.get("currency") or "COP").strip()
+
+
+def _money_series(
+    harvests: list[dict], losses: list[dict], periods: list[str], granularidad: str
+) -> dict:
+    """Series de kilos y dinero. Los montos de una moneda distinta a la dominante
+    se excluyen (nunca se suman ni se convierten)."""
+    monetary = [_currency(h) for h in harvests if h.get("price_per_kg") is not None]
+    monetary += [e["currency"] for e in losses if e["estimated_loss_amount"] is not None]
+    counts = Counter(monetary)
+    currency = max(counts, key=lambda c: (counts[c], c == "COP")) if counts else "COP"
+    others = {c: n for c, n in counts.items() if c != currency}
+
+    zero = Decimal(0)
+    harvested_by: dict[str, Decimal] = defaultdict(Decimal)
+    revenue_by: dict[str, Decimal] = defaultdict(Decimal)
+    without_price = 0
+    for row in harvests:
+        period = _period_key(row["harvested_at"], granularidad)
+        kg = dec(row["quantity_kg"])
+        harvested_by[period] += kg
+        price = dec(row.get("price_per_kg"))
+        if price is None:
+            without_price += 1
+        elif _currency(row) == currency:
+            revenue_by[period] += kg * price
+
+    expected_by: dict[str, Decimal] = defaultdict(Decimal)
+    lost_by: dict[str, Decimal] = defaultdict(Decimal)
+    loss_amount_by: dict[str, Decimal] = defaultdict(Decimal)
+    for e in losses:
+        period = _period_key(e["period_to"], granularidad)
+        expected_by[period] += e["expected_yield_kg"] or zero
+        lost_by[period] += e["lost_kg"] or zero
+        if e["currency"] == currency and e["estimated_loss_amount"] is not None:
+            loss_amount_by[period] += e["estimated_loss_amount"]
+
+    def money(value: Decimal) -> float:
+        return float(redondear_monto(value, currency))
+
+    harvest_series, income_series, loss_series, expected_vs = [], [], [], []
+    income_total = loss_total = zero
+    for period in periods:
+        income_total += revenue_by[period]
+        loss_total += loss_amount_by[period]
+        harvest_series.append({
+            "period": period, "kg": float(redondear_kg(harvested_by[period])),
+            "revenue": money(revenue_by[period]),
+        })
+        income_series.append({
+            "period": period, "revenue": money(revenue_by[period]),
+            "cumulative_revenue": money(income_total),
+        })
+        loss_series.append({
+            "period": period, "lost_kg": float(redondear_kg(lost_by[period])),
+            "loss_amount": money(loss_amount_by[period]),
+            "cumulative_loss_amount": money(loss_total),
+        })
+        if losses:
+            expected_vs.append({
+                "period": period, "expected_kg": float(redondear_kg(expected_by[period])),
+                "harvested_kg": float(redondear_kg(harvested_by[period])),
+            })
+
+    expected_total = sum(expected_by.values(), zero)
+    lost_total = sum(lost_by.values(), zero)
+    return {
+        "currency": currency,
+        "mixed_currency": len(counts) > 1,
+        "excluded_other_currency": (
+            {"count": sum(others.values()), "currency": max(others, key=others.get)}
+            if others else None
+        ),
+        "harvest_series": harvest_series,
+        "income_series": income_series,
+        "loss_series": loss_series,
+        "expected_vs_harvested": expected_vs,
+        "harvests_without_price": without_price,
+        "totals": {
+            "harvested_kg": float(redondear_kg(sum(harvested_by.values(), zero))),
+            "revenue": money(income_total),
+            "loss_amount": money(loss_total),
+            "expected_kg": float(redondear_kg(expected_total)),
+            "lost_kg": float(redondear_kg(lost_total)),
+            "loss_pct_overall": (
+                float(redondear_kg(lost_total / expected_total * 100)) if expected_total else None
+            ),
+        },
+    }
 
 
 async def _diagnostics(

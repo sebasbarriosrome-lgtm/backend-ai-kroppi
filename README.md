@@ -52,7 +52,24 @@ Supabase Auth. La documentación interactiva está en `/docs`.
 - `POST /plots/{plot_id}/samples` crea un muestreo con fechas y cantidades observadas.
 - `POST /diagnoses` requiere `plot_samples_id` y una foto; `GET /diagnoses`,
   `GET /diagnoses/{diagnostico_id}` consultan el historial.
+- `GET/POST /plots/{plot_id}/harvests`, `GET/PATCH/DELETE /harvests/{id}`: cosechas con
+  moneda (`COP`/`USD`); los totales se agrupan por moneda y la escritura devuelve
+  `affects_estimations`.
+- `GET /plots/{plot_id}/loss-estimations/defaults`, `POST .../loss-estimations/preview`,
+  `GET/POST /plots/{plot_id}/loss-estimations`, `GET/PATCH/DELETE /loss-estimations/{id}`:
+  el agricultor indica los kg esperados, precio y periodo; el backend calcula lo cosechado
+  y la pérdida (sin traslape de periodos por lote).
+- `PATCH/DELETE /samples/{sample_id}` y `DELETE /diagnoses/{diagnostico_id}`.
 - `GET /health`
 
 Las fotos se guardan en el bucket privado y las respuestas contienen URLs firmadas
 temporales. Gemini recibe únicamente los datos de la enfermedad, no la imagen.
+
+## Pruebas
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests
+```
+
+Las pruebas usan un doble en memoria de Supabase (`tests/conftest.py`); no tocan la base real.

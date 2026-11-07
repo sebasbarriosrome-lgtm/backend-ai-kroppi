@@ -1,6 +1,7 @@
 import logging
 from collections import Counter, defaultdict
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -11,7 +12,9 @@ from fastapi.concurrency import run_in_threadpool as hilo
 from app import config
 from app.core.exceptions import ReglaNegocio
 from app.repository import plot_modules_repository as repo
-from app.services import stats_service, storage
+from app.repository import cosecha_perdida_repository
+from app.services import cosecha_service, perdida_service, stats_service, storage
+from app.services.perdidas_calculo import a_json, formato_kg, formato_moneda, normalizar_estimacion
 
 log = logging.getLogger("kroppi.reports")
 _BUCKET = "reports"
@@ -107,41 +110,25 @@ async def datos_informe(
         }
         for row in care
     ]
-    harvest_rows = [
-        {"harvested_at": row["harvested_at"], "quantity_kg": float(row["quantity_kg"]),
-         "price_per_kg": row.get("price_per_kg"),
-         "value_cop": float(row["quantity_kg"]) * float(row["price_per_kg"])
-         if row.get("price_per_kg") is not None else None}
-        for row in harvests
-    ]
+    harvest_rows = [cosecha_service.item(row) for row in harvests]
+    production_totals = cosecha_service.totales(harvests)
+    currency = stats["currency"]
     loss_summary = None
     if losses:
-        latest = losses[-1]
-        inputs = latest.get("inputs") or {}
+        # La estimación más reciente cuyo periodo toca el rango del informe.
+        latest = max(losses, key=lambda e: (e["period_to"], str(e.get("created_at") or "")))
         loss_summary = {
-            "expected_kg": (
-                float(latest["expected_yield_kg"])
-                if latest.get("expected_yield_kg") is not None else None
-            ),
-            "harvested_kg": stats["totals"]["harvested_kg"],
-            "lost_kg": inputs.get("lost_kg"),
-            "loss_pct": inputs.get("loss_pct"),
-            "loss_amount_cop": (
-                float(latest["estimated_loss_amount"])
-                if latest.get("estimated_loss_amount") is not None else None
-            ),
-            "estimations": [
-                {
-                    "created_at": row["created_at"],
-                    "expected_yield_kg": float(row["expected_yield_kg"])
-                    if row.get("expected_yield_kg") is not None else None,
-                    "estimated_loss_amount": float(row["estimated_loss_amount"])
-                    if row.get("estimated_loss_amount") is not None else None,
-                    "inputs": row.get("inputs"),
-                    "explanation": row.get("explanation"),
-                }
-                for row in losses
-            ],
+            "estimation_id": latest["id"],
+            "period_from": latest["period_from"].isoformat(),
+            "period_to": latest["period_to"].isoformat(),
+            "expected_kg": a_json(latest["expected_yield_kg"]),
+            "harvested_kg": a_json(latest["harvested_kg"]),
+            "lost_kg": a_json(latest["lost_kg"]),
+            "loss_pct": a_json(latest["loss_pct"]),
+            "loss_amount": a_json(latest["estimated_loss_amount"]),
+            "currency": latest["currency"],
+            "explanation": latest.get("explanation"),
+            "estimations": [perdida_service.item(row) for row in losses],
         }
     samples_out = []
     for sample in samples:
@@ -166,8 +153,8 @@ async def datos_informe(
             f"se realizaron {len(samples)} muestreos entre {start} y {end}, con una "
             f"incidencia promedio de {avg:g} %. Se detectaron: {disease_summary}. "
             f"Se aplicaron {len(care)} cuidados con un costo de "
-            f"${stats['totals']['care_cost_cop']:,.0f} COP. Se cosecharon "
-            f"{stats['totals']['harvested_kg']:g} kg."
+            f"{formato_moneda(Decimal(str(stats['totals']['care_cost_cop'])), 'COP')} COP. "
+            f"Se cosecharon {formato_kg(Decimal(str(stats['totals']['harvested_kg'])))}."
         )
         bullets = []
         series = stats["incidence_series"]
@@ -196,24 +183,33 @@ async def datos_informe(
         "disease_evolution": disease_evolution, "sample_photos": sample_photos,
         "care_activities": care_rows, "harvests": harvest_rows,
         "production": {"harvested_kg": stats["totals"]["harvested_kg"],
-                       "revenue_cop": stats["totals"]["revenue_cop"],
+                       "revenue": stats["totals"]["revenue"], "currency": currency,
+                       "by_currency": production_totals["by_currency"],
                        "harvests_without_price": stats["harvests_without_price"]},
         "losses": loss_summary,
         "costs": {"care_cost_cop": stats["totals"]["care_cost_cop"]},
         "chart_series": {"incidence": stats["incidence_series"],
-                         "harvest": stats["harvest_series"], "loss_cumulative": stats["loss_series"]},
+                         "harvest": stats["harvest_series"], "loss_cumulative": stats["loss_series"],
+                         "expected_vs_harvested": stats["expected_vs_harvested"]},
         "conclusions": {"summary_text": summary_text, "bullets": bullets, "disclaimer": _DISCLAIMER},
     }
 
 
 async def _fetch(plot_id: str, start: date, end: date):
     import asyncio
-    return await asyncio.gather(
+    samples, care, harvests, estimations = await asyncio.gather(
         hilo(repo.muestreos, plot_id, start, end),
         hilo(repo.cuidados, plot_id, start, end),
         hilo(repo.cosechas, plot_id, start, end),
-        hilo(repo.perdidas, plot_id, start, end),
+        hilo(cosecha_perdida_repository.estimaciones, plot_id),
     )
+    # Estimaciones cuyo periodo toca el rango del informe (no por fecha de creación).
+    estimations = [
+        e for e in map(normalizar_estimacion, estimations)
+        if e["period_from"] and e["period_to"]
+        and e["period_from"] <= end and start <= e["period_to"]
+    ]
+    return samples, care, harvests, estimations
 
 
 async def subir_informe(
