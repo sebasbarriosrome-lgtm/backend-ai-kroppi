@@ -8,6 +8,7 @@ from .estimacion_perdida import PerdidaEstimadaCrear, PerdidaEstimadaEditar
 from .finca import FincaIn, FincaOut, FincaPatch
 from .lote import LoteIn, LoteOut, LotePatch
 from .muestreo import MuestreoIn, MuestreoOut, MuestreoPatch
+from .pagos import PagoCrearOut
 from .perfil import PerfilOut, PerfilPatch
 from .tipo_cultivo import TipoCultivoOut
 from .usuario import UsuarioOut
@@ -73,6 +74,7 @@ __all__ = [
     "FincaIn", "FincaOut", "FincaPatch",
     "LoteIn", "LoteOut", "LotePatch",
     "MuestreoIn", "MuestreoOut", "MuestreoPatch",
+    "PagoCrearOut",
     "PerfilOut", "PerfilPatch",
     "TipoCultivoOut",
     "UsuarioOut",

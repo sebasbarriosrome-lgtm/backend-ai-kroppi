@@ -18,6 +18,13 @@ SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET") or None
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "diagnosticos")
 SIGNED_URL_SEGUNDOS = 3600
 
+WOMPI_PUBLIC_KEY = os.getenv("WOMPI_PUBLIC_KEY") or None
+WOMPI_INTEGRITY_SECRET = os.getenv("WOMPI_INTEGRITY_SECRET") or None
+WOMPI_CHECKOUT_URL = os.getenv("WOMPI_CHECKOUT_URL") or None
+WOMPI_EVENTS_SECRET = os.getenv("WOMPI_EVENTS_SECRET") or None
+WOMPI_PRIVATE_KEY = os.getenv("WOMPI_PRIVATE_KEY") or None
+WOMPI_API_URL = os.getenv("WOMPI_API_URL", "https://sandbox.wompi.co/v1").rstrip("/")
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 GEMINI_TIMEOUT = float(os.getenv("GEMINI_TIMEOUT", "15"))

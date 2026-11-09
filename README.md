@@ -13,11 +13,17 @@ SUPABASE_SERVICE_ROLE_KEY=<clave-del-servidor>
 SUPABASE_JWT_SECRET=<opcional-si-los-tokens-usan-HS256>
 SUPABASE_BUCKET=diagnosticos
 GEMINI_API_KEY=<opcional>
+WOMPI_PUBLIC_KEY=<clave-publica-de-Wompi>
+WOMPI_INTEGRITY_SECRET=<secreto-de-integridad-de-Wompi>
+WOMPI_EVENTS_SECRET=<secreto-de-eventos-de-Wompi>
+WOMPI_PRIVATE_KEY=<llave-privada-de-Wompi>
+WOMPI_API_URL=https://sandbox.wompi.co/v1
+WOMPI_CHECKOUT_URL=https://checkout.wompi.co/p/
 ```
 
-La clave `SUPABASE_SERVICE_ROLE_KEY` solo debe existir en el servidor. La API valida el
-JWT del usuario; para cultivos, verifica la propiedad consultando `farms.owner_id` y
-relaciona cada cultivo por `crops.farm_id`.
+La clave `SUPABASE_SERVICE_ROLE_KEY` y las credenciales/secretos de Wompi solo deben
+existir en el servidor. La API valida el JWT del usuario; para cultivos, verifica la
+propiedad consultando `farms.owner_id` y relaciona cada cultivo por `crops.farm_id`.
 
 Instala dependencias y ejecuta:
 
@@ -44,8 +50,9 @@ imágenes JPEG.
 
 ## Endpoints
 
-Todos los endpoints excepto `/health` requieren `Authorization: Bearer <access_token>` de
-Supabase Auth. La documentación interactiva está en `/docs`.
+Todos los endpoints excepto `/health` y `/payments/webhook` requieren
+`Authorization: Bearer <access_token>` de Supabase Auth. La documentación interactiva
+está en `/docs`.
 
 - `GET /crop-types`, `GET/POST /crops`, `GET/PATCH/DELETE /crops/{crop_id}`
 - `GET/POST /crops/{crop_id}/plots`, `GET/PATCH /plots/{plot_id}`
@@ -61,9 +68,27 @@ Supabase Auth. La documentación interactiva está en `/docs`.
   y la pérdida (sin traslape de periodos por lote).
 - `PATCH/DELETE /samples/{sample_id}` y `DELETE /diagnoses/{diagnostico_id}`.
 - `GET /health`
+- `POST /payments/create` crea un pago pendiente de Premium y devuelve la URL del
+  checkout de Wompi. Requiere un JWT de Supabase; el precio y la moneda los fija el
+  servidor.
+- `POST /payments/webhook` recibe eventos públicos de Wompi, valida el checksum y
+  consulta la transacción con su API antes de confirmar el pago. No requiere JWT.
+  La activación de Premium y el cambio del pago ocurren atómicamente mediante la
+  función `public.confirm_wompi_payment`.
+
+Antes de habilitar el webhook, ejecuta `migrations/005_confirm_wompi_payment.sql`
+en el SQL Editor de Supabase. Configura en Wompi Sandbox la URL pública
+`https://<dominio-api>/payments/webhook` como URL de eventos y habilita el evento
+`transaction.updated`. La URL debe ser accesible por HTTPS.
 
 Las fotos se guardan en el bucket privado y las respuestas contienen URLs firmadas
 temporales. Gemini recibe únicamente los datos de la enfermedad, no la imagen.
+
+Para probar el flujo completo en Sandbox: crea el checkout con un JWT válido,
+completa el pago de prueba en Wompi y verifica que Wompi envíe
+`transaction.updated` a la URL configurada. El webhook valida el evento, consulta la
+transacción usando la llave privada y confirma `payments`/`profiles` en la base. No
+se debe activar Premium desde la redirección del checkout.
 
 ## Pruebas
 
@@ -72,4 +97,10 @@ pip install -r requirements-dev.txt
 python -m pytest tests
 ```
 
-Las pruebas usan un doble en memoria de Supabase (`tests/conftest.py`); no tocan la base real.
+Las pruebas usan dobles de Supabase y Wompi; no requieren una conexión real. La RPC se
+simula en las pruebas automatizadas; la atomicidad efectiva la proporciona la función SQL.
+
+Para probar `POST /payments/create`, inicia sesión en la app y copia el access token
+de Supabase. En `/docs`, autoriza la petición con `Bearer <access_token>` y ejecuta el
+endpoint sin cuerpo; la respuesta contiene la referencia, firma de integridad y URL
+para abrir en el checkout web.
