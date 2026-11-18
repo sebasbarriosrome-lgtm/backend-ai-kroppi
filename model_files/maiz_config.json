@@ -1,0 +1,5 @@
+{
+  "class_names": ["Maiz___healthy", "Maiz___roya", "Maiz___tizon", "Maiz___mancha_gris"],
+  "umbral": 0.7,
+  "img_size": [224, 224]
+}

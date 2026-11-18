@@ -35,7 +35,7 @@ async def firmar_diagnosticos(http: httpx.AsyncClient, registros: list[dict]) ->
 async def crear_diagnostico(
     *,
     http: httpx.AsyncClient,
-    clasificador: Classifier,
+    clasificadores: dict[str, Classifier],
     user_id: str,
     contenido: bytes,
     content_type: str | None,
@@ -58,10 +58,12 @@ async def crear_diagnostico(
 
     contexto = await hilo(diagnosis_repository.contexto_muestreo, user_id, plot_samples_id)
     tipo = contexto["crop_type"]
-    if tipo["slug"] not in config.CULTIVOS_SOPORTADOS:
+    slug = tipo["slug"]
+    if slug not in config.CULTIVOS_SOPORTADOS:
         raise HTTPException(400, f"No hay modelo para el cultivo '{tipo['slug']}'.")
+    clasificador = clasificadores[slug]
 
-    codigos = [config.CLASE_A_CODIGO[c] for c in clasificador.class_names]
+    codigos = [clasificador.class_to_code[c] for c in clasificador.class_names]
     probs = await hilo(clasificador.predict, imagen)
     orden = np.argsort(probs)[::-1][:3]
     top = [{"disease_code": codigos[i], "confidence": round(float(probs[i]), 4)} for i in orden]
@@ -73,7 +75,8 @@ async def crear_diagnostico(
 
     recomendaciones: list[str] = []
     if enfermedad is not None and not enfermedad["is_healthy"]:
-        recomendaciones = await obtener_recomendaciones(enfermedad)
+        nombre_cultivo = "maíz" if slug == "maiz" else "café"
+        recomendaciones = await obtener_recomendaciones(enfermedad, nombre_cultivo)
 
     diag_id = str(uuid4())
     ruta = f"{user_id}/{diag_id}.jpg"
@@ -89,7 +92,7 @@ async def crear_diagnostico(
         "plot_samples_id": plot_samples_id,
         "image_path": ruta,
         "created_at": ahora,
-        "model_version": config.MODEL_VERSION,
+        "model_version": clasificador.model_version,
         "confidence": confianza,
         "top": top,
         "recommendations": recomendaciones,
@@ -109,7 +112,8 @@ async def crear_diagnostico(
                 "confidence": confianza,
                 "recommendations": recomendaciones,
                 "ai_prediction": {
-                    "model_version": config.MODEL_VERSION,
+                    "model_version": clasificador.model_version,
+                    "model_threshold": clasificador.umbral,
                     "confidence": confianza,
                     "disease_code": etiqueta,
                     "disease_name": enfermedad["name"] if enfermedad else "Planta sana",

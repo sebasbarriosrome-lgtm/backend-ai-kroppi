@@ -31,8 +31,27 @@ Reglas:
 
 Responde SOLO con un arreglo JSON de strings, sin texto adicional."""
 
+PROMPT_OTRO_CULTIVO = """Eres un asistente de apoyo para agricultores. Un modelo de visión por computador \
+detectó posiblemente esta condición en una foto de una hoja de {crop_name}:
 
-async def obtener_recomendaciones(enfermedad: dict) -> list[str]:
+- Nombre: {name}
+- Agente: {scientific_name} ({pathogen_type})
+- Síntomas típicos: {symptoms}
+
+Escribe de 3 a 5 recomendaciones breves y prácticas para el productor.
+
+Reglas:
+- Español sencillo, sin tecnicismos innecesarios.
+- Cada recomendación con máximo 25 palabras.
+- Enfócate en monitoreo del lote, prácticas culturales, sanidad del cultivo y manejo integrado.
+- NO menciones nombres comerciales, dosis ni concentraciones de agroquímicos.
+- Una de las recomendaciones debe indicar confirmar el diagnóstico con un agrónomo o técnico de campo.
+- Habla del diagnóstico como una posibilidad, no como una certeza.
+
+Responde SOLO con un arreglo JSON de strings, sin texto adicional."""
+
+
+async def obtener_recomendaciones(enfermedad: dict, crop_name: str = "café") -> list[str]:
     """Recomendaciones de Gemini. Si algo falla devuelve [] y el diagnóstico sigue funcionando."""
     if _client is None:
         log.warning("GEMINI_API_KEY no configurada; se omiten las recomendaciones.")
@@ -41,7 +60,9 @@ async def obtener_recomendaciones(enfermedad: dict) -> list[str]:
     if codigo in _cache:
         return _cache[codigo]
 
-    prompt = PROMPT.format(
+    plantilla = PROMPT if crop_name == "café" else PROMPT_OTRO_CULTIVO
+    prompt = plantilla.format(
+        crop_name=crop_name,
         name=enfermedad["name"],
         scientific_name=enfermedad["scientific_name"] or "no especificado",
         pathogen_type=enfermedad["pathogen_type"] or "no especificado",

@@ -8,22 +8,28 @@ try:
 except ImportError:
     from tensorflow.lite.python.interpreter import Interpreter
 
-from app.config import MODEL_CONFIG, TFLITE_PATH
+from app.config import MODEL_CONFIGS
 
 
 class Classifier:
-    """Envuelve el modelo .tflite. La normalización ya está DENTRO del modelo:
-    la imagen entra en valores 0-255, RGB, 224x224, sin dividir."""
+    """Envuelve un modelo .tflite; la normalización ya está dentro del modelo."""
 
-    def __init__(self):
-        self.interpreter = Interpreter(model_path=str(TFLITE_PATH))
+    def __init__(self, cultivo: str = "cafe"):
+        try:
+            modelo = MODEL_CONFIGS[cultivo]
+        except KeyError as error:
+            raise ValueError(f"No hay configuración de modelo para '{cultivo}'.") from error
+
+        self.interpreter = Interpreter(model_path=str(modelo["tflite_path"]))
         self.interpreter.allocate_tensors()
         self._entrada = self.interpreter.get_input_details()[0]["index"]
         self._salida = self.interpreter.get_output_details()[0]["index"]
         self._lock = threading.Lock()
-        self.class_names: list[str] = MODEL_CONFIG["class_names"]
-        self.umbral: float = MODEL_CONFIG["umbral"]
-        self.tamano = tuple(MODEL_CONFIG["img_size"])
+        self.class_names: list[str] = modelo["config"]["class_names"]
+        self.umbral: float = modelo["config"]["umbral"]
+        self.tamano = tuple(modelo["config"]["img_size"])
+        self.class_to_code: dict[str, str] = modelo["class_to_code"]
+        self.model_version: str = modelo["version"]
 
     def predict(self, imagen: Image.Image) -> np.ndarray:
         img = imagen.convert("RGB").resize(self.tamano, Image.BILINEAR)

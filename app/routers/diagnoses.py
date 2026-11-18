@@ -20,7 +20,7 @@ async def crear_diagnostico(
     contenido = await file.read()
     return await diagnosis_service.crear_diagnostico(
         http=request.app.state.http,
-        clasificador=request.app.state.classifier,
+        clasificadores=request.app.state.classifiers,
         user_id=usuario.id,
         contenido=contenido,
         content_type=file.content_type,

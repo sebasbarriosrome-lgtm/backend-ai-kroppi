@@ -27,7 +27,8 @@ def _validar_fecha(fecha: date) -> None:
 def _validar_enfermedad(codigo: str | None) -> None:
     if codigo is not None:
         from app import config
-        if codigo not in config.ENFERMEDADES or codigo == config.CODIGO_SANO:
+        enfermedad = config.ENFERMEDADES.get(codigo)
+        if enfermedad is None or enfermedad["is_healthy"]:
             raise ReglaNegocio(400, "El código de enfermedad no existe.")
 
 

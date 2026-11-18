@@ -30,7 +30,8 @@ def _disease_code(row: dict) -> str | None:
     if code:
         return code
     top = prediction.get("top") or []
-    if top and float(top[0].get("confidence") or 0) >= config.MODEL_CONFIG["umbral"]:
+    threshold = prediction.get("model_threshold", config.MODEL_CONFIG["umbral"])
+    if top and float(top[0].get("confidence") or 0) >= threshold:
         return top[0].get("disease_code")
     return None
 
@@ -58,7 +59,7 @@ async def datos_informe(
     photos = []
     for diag in diagnostics:
         code = _disease_code(diag)
-        if not code or code == config.CODIGO_SANO:
+        if not code or config.ENFERMEDADES.get(code, {}).get("is_healthy"):
             continue
         disease_counts[code] += 1
         created_at = datetime.fromisoformat(str(diag["created_at"]).replace("Z", "+00:00"))

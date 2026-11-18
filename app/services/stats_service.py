@@ -29,7 +29,8 @@ def _code(diagnostic: dict) -> str | None:
     if code:
         return code
     top = prediction.get("top") or []
-    if top and float(top[0].get("confidence") or 0) >= config.MODEL_CONFIG["umbral"]:
+    threshold = prediction.get("model_threshold", config.MODEL_CONFIG["umbral"])
+    if top and float(top[0].get("confidence") or 0) >= threshold:
         return top[0].get("disease_code")
     return None
 
@@ -100,7 +101,7 @@ async def obtener(
     disease_periods: dict[tuple[str, str], int] = defaultdict(int)
     for diagnostic in diagnostics:
         code = _code(diagnostic)
-        if not code or code == config.CODIGO_SANO:
+        if not code or config.ENFERMEDADES.get(code, {}).get("is_healthy"):
             continue
         disease_counts[code] += 1
         disease_periods[(_period_key(diagnostic["created_at"], granularidad), code)] += 1

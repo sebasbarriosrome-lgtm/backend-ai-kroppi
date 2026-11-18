@@ -111,18 +111,20 @@ async def obtener(
             prediction = diagnosis.get("ai_prediction") or {}
             code = diagnosis.get("predicted_label") or prediction.get("disease_code")
             top = prediction.get("top") or []
-            if not code and top and float(top[0].get("confidence") or 0) >= config.MODEL_CONFIG["umbral"]:
+            threshold = prediction.get("model_threshold", config.MODEL_CONFIG["umbral"])
+            if not code and top and float(top[0].get("confidence") or 0) >= threshold:
                 code = top[0].get("disease_code")
-            if code and code != config.CODIGO_SANO:
+            if code and not config.ENFERMEDADES.get(code, {}).get("is_healthy"):
                 grouped[(diagnosis["plot_samples_id"], code)].append(diagnosis)
         first_by_disease: dict[str, tuple[datetime, tuple[str, str]]] = {}
         for diagnosis in historical_diagnostics:
             prediction = diagnosis.get("ai_prediction") or {}
             code = diagnosis.get("predicted_label") or prediction.get("disease_code")
             top = prediction.get("top") or []
-            if not code and top and float(top[0].get("confidence") or 0) >= config.MODEL_CONFIG["umbral"]:
+            threshold = prediction.get("model_threshold", config.MODEL_CONFIG["umbral"])
+            if not code and top and float(top[0].get("confidence") or 0) >= threshold:
                 code = top[0].get("disease_code")
-            if code and code != config.CODIGO_SANO:
+            if code and not config.ENFERMEDADES.get(code, {}).get("is_healthy"):
                 occurred = _fecha(diagnosis["created_at"])
                 if code not in first_by_disease or occurred < first_by_disease[code][0]:
                     first_by_disease[code] = (occurred, (diagnosis["plot_samples_id"], code))

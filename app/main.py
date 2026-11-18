@@ -16,7 +16,10 @@ from app.services.classifier import Classifier
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.classifier = Classifier()
+    app.state.classifiers = {
+        cultivo: Classifier(cultivo) for cultivo in config.MODEL_CONFIGS
+    }
+    app.state.classifier = app.state.classifiers["cafe"]
     app.state.http = httpx.AsyncClient(timeout=20)
     yield
     await app.state.http.aclose()
