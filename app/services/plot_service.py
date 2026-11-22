@@ -1,8 +1,8 @@
 from fastapi.concurrency import run_in_threadpool as hilo
 import httpx
 
-from app.repository import diagnosis_repository, plot_repository
-from app.services.diagnosis_service import firmar_diagnosticos
+from app.repository import plot_repository
+from app.services.diagnosis_service import listar_diagnosticos
 from app.services.formatters import lote_json, muestreo_json
 
 
@@ -19,8 +19,7 @@ async def obtener_lote(user_id: str, plot_id: str, http: httpx.AsyncClient) -> d
     lote = await hilo(plot_repository.obtener_lote, user_id, plot_id)
     if lote["last_sample"]:
         muestreo_json(lote["last_sample"])
-    recientes = await hilo(diagnosis_repository.diagnosticos_de_lote, user_id, plot_id, 10)
-    lote["recent_diagnostics"] = await firmar_diagnosticos(http, recientes)
+    lote["recent_diagnostics"] = await listar_diagnosticos(http, user_id, 10, 0, plot_id)
     return lote_json(lote)
 
 

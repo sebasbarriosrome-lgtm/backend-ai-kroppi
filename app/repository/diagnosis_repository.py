@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from app.core.exceptions import ReglaNegocio
 from app.db.session import supabase_client
 from app.repository.helpers import cargar_lote, enriquecer_diagnosticos, registro
@@ -35,27 +37,23 @@ def listar_diagnosticos(
     limite: int,
     desplazamiento: int,
     plot_id: str | None = None,
+    desde: str | None = None,
 ) -> list[dict]:
-    query = (
-        supabase_client.table("diagnostics")
-        .select("*")
-        .eq("user_id", user_id)
-        .order("created_at", desc=True)
-    )
+    columns = "*"
     if plot_id:
         cargar_lote(user_id, plot_id)
-        samples = (
-            supabase_client.table("plot_samples")
-            .select("id")
-            .eq("plot_id", plot_id)
-            .execute()
-            .data
-            or []
-        )
-        sample_ids = [sample["id"] for sample in samples]
-        if not sample_ids:
-            return []
-        query = query.in_("plot_samples_id", sample_ids)
+        columns = "*,plot_samples!inner(plot_id)"
+    query = (
+        supabase_client.table("diagnostics")
+        .select(columns)
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .order("id", desc=True)
+    )
+    if desde is not None:
+        query = query.gte("created_at", desde)
+    if plot_id:
+        query = query.eq("plot_samples.plot_id", plot_id)
     filas = (
         query.range(desplazamiento, desplazamiento + limite - 1).execute().data or []
     )
@@ -65,7 +63,7 @@ def listar_diagnosticos(
     ]
 
 
-def obtener_diagnostico(user_id: str, diagnostico_id: str) -> dict:
+def obtener_diagnostico(user_id: str, diagnostico_id: str, desde: str | None = None) -> dict:
     filas = (
         supabase_client.table("diagnostics")
         .select("*")
@@ -78,6 +76,8 @@ def obtener_diagnostico(user_id: str, diagnostico_id: str) -> dict:
     )
     if not filas:
         raise ReglaNegocio(404, "Diagnóstico no encontrado.")
+    if desde is not None and datetime.fromisoformat(filas[0]["created_at"]) < datetime.fromisoformat(desde):
+        raise ReglaNegocio(403, "El historial completo de diagnósticos requiere Premium.")
     return registro(enriquecer_diagnosticos(filas)[0])
 
 
@@ -100,5 +100,4 @@ def eliminar_diagnostico(user_id: str, diagnostico_id: str) -> str | None:
 
 
 def diagnosticos_de_lote(user_id: str, plot_id: str, limite: int = 10) -> list[dict]:
-    cargar_lote(user_id, plot_id)
     return listar_diagnosticos(user_id, limite, 0, plot_id)

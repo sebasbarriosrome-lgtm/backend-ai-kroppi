@@ -9,7 +9,7 @@ from app import config
 from app.core import ReglaNegocio
 from app.routers import (
     care, crops, diagnoses, harvests, health, losses, payments, plot_modules, plots,
-    samples,
+    samples, subscriptions,
 )
 from app.services.classifier import Classifier
 
@@ -55,3 +55,4 @@ app.include_router(harvests.router)
 app.include_router(losses.router)
 app.include_router(plot_modules.router)
 app.include_router(payments.router)
+app.include_router(subscriptions.router)

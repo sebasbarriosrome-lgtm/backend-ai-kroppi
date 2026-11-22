@@ -4,6 +4,7 @@ from decimal import Decimal
 from app.core.exceptions import ReglaNegocio
 from app.db.session import supabase_client
 from app.repository.helpers import cargar_cultivo, cargar_lote, lote, muestreo, tipo
+from app.services.subscription_service import insertar_recurso
 
 
 def _validar_area_finca(farm_id: str, area_nueva: float, plot_id: str | None = None) -> None:
@@ -67,7 +68,7 @@ def crear_lote(user_id: str, crop_id: str, datos: dict) -> dict:
         "longitude": datos.get("longitude"),
         "status": "HEALTHY",
     }
-    supabase_client.table("plots").insert(payload).execute()
+    insertar_recurso("plots", payload)
     return lote(cargar_lote(user_id, payload["id"]))
 
 

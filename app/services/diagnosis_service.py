@@ -1,7 +1,7 @@
 import io
 import logging
 from datetime import datetime, timezone
-from uuid import uuid4
+from uuid import UUID, NAMESPACE_URL, uuid4, uuid5
 
 import httpx
 import numpy as np
@@ -14,7 +14,7 @@ from app.repository import diagnosis_repository
 from app.schemas import diagnostico_json
 from app.services.classifier import Classifier
 from app.services.recommendations import obtener_recomendaciones
-from app.services import storage
+from app.services import storage, subscription_service
 
 log = logging.getLogger("kroppi")
 
@@ -42,6 +42,7 @@ async def crear_diagnostico(
     plot_samples_id: str,
     latitude: float | None,
     longitude: float | None,
+    idempotency_key: UUID | None = None,
 ) -> dict:
     if (latitude is None) != (longitude is None):
         raise HTTPException(400, "Envía latitude y longitude juntas, o ninguna.")
@@ -64,6 +65,11 @@ async def crear_diagnostico(
     clasificador = clasificadores[slug]
 
     codigos = [clasificador.class_to_code[c] for c in clasificador.class_names]
+    diag_id = str(
+        uuid5(NAMESPACE_URL, f"kroppi:diagnoses:{user_id}:{idempotency_key}")
+        if idempotency_key is not None else uuid4()
+    )
+    await subscription_service.consumir_diagnostico(user_id, diag_id)
     probs = await hilo(clasificador.predict, imagen)
     orden = np.argsort(probs)[::-1][:3]
     top = [{"disease_code": codigos[i], "confidence": round(float(probs[i]), 4)} for i in orden]
@@ -78,7 +84,6 @@ async def crear_diagnostico(
         nombre_cultivo = "maíz" if slug == "maiz" else "café"
         recomendaciones = await obtener_recomendaciones(enfermedad, nombre_cultivo)
 
-    diag_id = str(uuid4())
     ruta = f"{user_id}/{diag_id}.jpg"
     try:
         await storage.subir_imagen(http, ruta, await hilo(a_jpeg, imagen))
@@ -145,12 +150,18 @@ async def listar_diagnosticos(
     offset: int,
     plot_id: str | None,
 ) -> list[dict]:
-    registros = await hilo(diagnosis_repository.listar_diagnosticos, user_id, limit, offset, plot_id)
+    acceso = await subscription_service.acceso(user_id)
+    desde = subscription_service.inicio_historial_diagnosticos(acceso)
+    registros = await hilo(
+        diagnosis_repository.listar_diagnosticos, user_id, limit, offset, plot_id, desde
+    )
     return await firmar_diagnosticos(http, registros)
 
 
 async def obtener_diagnostico(http: httpx.AsyncClient, user_id: str, diagnostico_id: str) -> dict:
-    registro = await hilo(diagnosis_repository.obtener_diagnostico, user_id, diagnostico_id)
+    acceso = await subscription_service.acceso(user_id)
+    desde = subscription_service.inicio_historial_diagnosticos(acceso)
+    registro = await hilo(diagnosis_repository.obtener_diagnostico, user_id, diagnostico_id, desde)
     return (await firmar_diagnosticos(http, [registro]))[0]
 
 

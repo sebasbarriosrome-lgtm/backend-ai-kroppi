@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, Query, Request, UploadFile
 
 from app.core.security import Usuario, usuario_actual
 from app.services import diagnosis_service
@@ -15,6 +15,7 @@ async def crear_diagnostico(
     plot_samples_id: UUID = Form(...),
     latitude: float | None = Form(None, ge=-90, le=90),
     longitude: float | None = Form(None, ge=-180, le=180),
+    idempotency_key: UUID | None = Header(None),
     usuario: Usuario = Depends(usuario_actual),
 ):
     contenido = await file.read()
@@ -27,6 +28,7 @@ async def crear_diagnostico(
         plot_samples_id=str(plot_samples_id),
         latitude=latitude,
         longitude=longitude,
+        idempotency_key=idempotency_key,
     )
 
 

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 from app.core.security import Usuario, usuario_actual
 from app.schemas.cuidado import CuidadoCrear, CuidadoPatch, TipoCuidado
 from app.services import care_service
+from app.services.subscription_service import usuario_premium
 
 router = APIRouter(tags=["cuidados"])
 
@@ -30,7 +31,7 @@ async def listar_cuidados(
     tipo: Annotated[TipoCuidado | None, Query(alias="type")] = None,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    usuario: Usuario = Depends(usuario_actual),
+    usuario: Usuario = Depends(usuario_premium),
 ):
     return await care_service.listar(
         request.app.state.http, usuario.id, str(plot_id), desde, hasta, tipo, limit, offset

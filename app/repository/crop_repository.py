@@ -3,6 +3,7 @@ from uuid import uuid4
 from app.core.exceptions import ReglaNegocio
 from app.db.session import supabase_client
 from app.repository.helpers import cargar_cultivo, cultivo, fincas_del_usuario, tipo
+from app.services.subscription_service import insertar_recurso
 
 
 def _fecha_iso(valor):
@@ -107,7 +108,7 @@ def crear_cultivo(user_id: str, datos: dict) -> dict:
         "expected_harvest_at": _fecha_iso(datos.get("expected_harvest_at")),
         "is_active": True,
     }
-    supabase_client.table("crops").insert(creado).execute()
+    insertar_recurso("crops", creado)
     return cultivo(cargar_cultivo(user_id, creado["id"]))
 
 

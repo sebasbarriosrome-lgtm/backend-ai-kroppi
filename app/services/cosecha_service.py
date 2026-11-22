@@ -114,7 +114,9 @@ async def obtener(user_id: str, harvest_id: str) -> dict:
     return item(row)
 
 
-async def crear(user_id: str, plot_id: str, datos: dict) -> dict:
+async def crear(
+    user_id: str, plot_id: str, datos: dict, *, incluir_estimaciones: bool = True,
+) -> dict:
     lote = await _lote(user_id, plot_id)
     _validar_fecha(datos["harvested_at"], lote)
     ahora = tiempo.ahora()
@@ -124,11 +126,16 @@ async def crear(user_id: str, plot_id: str, datos: dict) -> dict:
     })
     return {
         **item(row),
-        "affects_estimations": await _estimaciones_afectadas(plot_id, [datos["harvested_at"]]),
+        "affects_estimations": (
+            await _estimaciones_afectadas(plot_id, [datos["harvested_at"]])
+            if incluir_estimaciones else []
+        ),
     }
 
 
-async def actualizar(user_id: str, harvest_id: str, datos: dict) -> dict:
+async def actualizar(
+    user_id: str, harvest_id: str, datos: dict, *, incluir_estimaciones: bool = True,
+) -> dict:
     actual, lote = await _cosecha_propia(user_id, harvest_id)
     if "harvested_at" in datos:
         if datos["harvested_at"] is None:
@@ -142,15 +149,19 @@ async def actualizar(user_id: str, harvest_id: str, datos: dict) -> dict:
     fechas = {_fecha(actual["harvested_at"]), _fecha(row["harvested_at"])}
     return {
         **item(row),
-        "affects_estimations": await _estimaciones_afectadas(actual["plot_id"], list(fechas)),
+        "affects_estimations": (
+            await _estimaciones_afectadas(actual["plot_id"], list(fechas))
+            if incluir_estimaciones else []
+        ),
     }
 
 
-async def eliminar(user_id: str, harvest_id: str) -> dict:
+async def eliminar(user_id: str, harvest_id: str, *, incluir_estimaciones: bool = True) -> dict:
     actual, _ = await _cosecha_propia(user_id, harvest_id)
     await hilo(repo.borrar_cosecha, harvest_id)
     return {
-        "affects_estimations": await _estimaciones_afectadas(
-            actual["plot_id"], [_fecha(actual["harvested_at"])]
+        "affects_estimations": (
+            await _estimaciones_afectadas(actual["plot_id"], [_fecha(actual["harvested_at"])])
+            if incluir_estimaciones else []
         ),
     }
